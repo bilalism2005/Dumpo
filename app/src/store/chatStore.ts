@@ -1,0 +1,156 @@
+import { create } from 'zustand';
+import { apiRequest } from '../services/api';
+import * as Crypto from 'expo-crypto';
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string; // confirmation_text for assistant, raw text for user
+  bucket_tags?: string[];
+  reminder_set?: boolean;
+  reminder_text?: string | null;
+  created_at: string;
+  items?: any[];
+}
+
+interface ChatState {
+  messages: ChatMessage[];
+  isLoading: boolean;
+  error: string | null;
+  fetchMessages: () => Promise<void>;
+  sendMessage: (text: string) => Promise<void>;
+  clearChat: () => void;
+  reclassifyMessageItem: (msgIndex: number, itemIndex: number, toBucket: string) => Promise<void>;
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  messages: [],
+  isLoading: false,
+  error: null,
+  
+  fetchMessages: async () => {
+    set({ isLoading: true });
+    try {
+      // In a real app, we would fetch chat history from Supabase:
+      // const res = await supabase.table("chat_messages").select("*")...
+      // For the MVP, we can fetch the user's raw logs or mock/load state if empty.
+      // If messages list is empty, prepend the welcome message:
+      const msgs = get().messages;
+      if (msgs.length === 0) {
+        set({
+          messages: [{
+            id: 'welcome',
+            role: 'assistant',
+            content: "Hey, I'm Dumpo. Drop anything on your mind. I'll take care of the rest.",
+            created_at: new Date().toISOString()
+          }],
+          isLoading: false
+        });
+      } else {
+        set({ isLoading: false });
+      }
+    } catch (err: any) {
+      set({ error: err.message, isLoading: false });
+    }
+  },
+  
+  sendMessage: async (text) => {
+    if (!text.trim()) return;
+    
+    // Generate a secure UUID locally
+    const messageId = Crypto.randomUUID();
+    const userMsg: ChatMessage = {
+      id: messageId,
+      role: 'user',
+      content: text,
+      created_at: new Date().toISOString()
+    };
+    
+    set((state) => ({
+      messages: [...state.messages, userMsg],
+      isLoading: true,
+      error: null
+    }));
+    
+    try {
+      const response = await apiRequest('/api/v1/process', 'POST', {
+        message_id: messageId,
+        text: text
+      });
+      
+      if (response.success && response.items) {
+        // Map API response to assistant message bubbles
+        const assistantMsgs: ChatMessage[] = response.items.map((item: any, idx: number) => ({
+          id: `${messageId}-resp-${idx}`,
+          role: 'assistant',
+          content: item.confirmation_text,
+          bucket_tags: item.bucket_tags,
+          reminder_set: item.reminder_set,
+          reminder_text: item.reminder_text,
+          created_at: new Date().toISOString(),
+          items: [item] // Save detailed item data for reclassification
+        }));
+        
+        set((state) => ({
+          messages: [...state.messages, ...assistantMsgs],
+          isLoading: false
+        }));
+      } else {
+        throw new Error("Failed to process message classification");
+      }
+    } catch (err: any) {
+      // Robust error handling - never crash. Create a friendly assistant error bubble
+      const errBubble: ChatMessage = {
+        id: `${messageId}-err`,
+        role: 'assistant',
+        content: "Oops, I had a small hiccup processing that. I saved it to Others for now.",
+        bucket_tags: ["📦 Others"],
+        created_at: new Date().toISOString()
+      };
+      
+      set((state) => ({
+        messages: [...state.messages, errBubble],
+        isLoading: false
+      }));
+    }
+  },
+  
+  clearChat: () => {
+    set({ messages: [] });
+  },
+
+  reclassifyMessageItem: async (msgIndex, itemIndex, toBucket) => {
+    const msgs = [...get().messages];
+    const msg = msgs[msgIndex];
+    if (!msg || !msg.items) return;
+    const item = msg.items[itemIndex];
+    if (!item) return;
+
+    try {
+      // Call backend to reclassify
+      await apiRequest(`/api/v1/items/${item.primary_bucket}/${item.id}/reclassify`, 'PATCH', {
+        to_bucket: toBucket
+      });
+      
+      // Update local state tags and text
+      const bucketIcons: Record<string, string> = {
+        tasks: "✅ Tasks",
+        ideas: "💡 Ideas",
+        journals: "📓 Journal",
+        finance: "💰 Finance",
+        health: "❤️ Health",
+        watchlist: "🎬 Watchlist",
+        others: "📦 Others"
+      };
+      
+      const newTag = bucketIcons[toBucket] || `📦 ${toBucket.toUpperCase()}`;
+      item.primary_bucket = toBucket;
+      msg.bucket_tags = [newTag];
+      msg.content = `Moved to ${toBucket.toUpperCase()}.`;
+      
+      set({ messages: msgs });
+    } catch (error) {
+      console.error("Failed to reclassify message item", error);
+    }
+  }
+}));
