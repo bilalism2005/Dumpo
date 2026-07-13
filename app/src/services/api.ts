@@ -1,11 +1,8 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '../config';
 
-const API_BASE_URL = Platform.select({
-  android: 'http://10.0.2.2:8000',
-  ios: 'http://localhost:8000',
-  default: 'http://localhost:8000',
-});
+const API_BASE_URL = API_URL;
 
 const TOKEN_KEY = 'supabase_jwt_token';
 
