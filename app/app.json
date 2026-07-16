@@ -40,6 +40,19 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "58c3e42e-59ec-46bf-95de-d0ba64e715fb"
+      }
+    },
+    "owner": "bilalism2005",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/58c3e42e-59ec-46bf-95de-d0ba64e715fb"
     }
   }
 }
