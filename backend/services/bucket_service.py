@@ -7,7 +7,7 @@ from backend.services.llm_service import merge_journals_narrative
 logger = logging.getLogger(__name__)
 supabase = get_supabase_client()
 
-def write_to_bucket(
+async def write_to_bucket(
     user_id: str,
     dump_id: str,
     bucket: str,
@@ -54,7 +54,7 @@ def write_to_bucket(
             if existing.data:
                 # Merge existing journal with new journal dump
                 old_entry = existing.data[0]
-                merged_content = merge_journals_narrative(old_entry.get("content", ""), extracted_data.get("content", ""), journal_date)
+                merged_content = await merge_journals_narrative(old_entry.get("content", ""), extracted_data.get("content", ""), journal_date)
                 # Combine secondary buckets
                 new_sec = list(set(old_entry.get("secondary_buckets", []) + secondary_buckets))
                 

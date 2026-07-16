@@ -20,7 +20,7 @@ async def process_dump(
         )
         
     try:
-        response_data = process_user_dump(
+        response_data = await process_user_dump(
             user_id=user_id,
             message_id=payload.message_id,
             text=payload.text,

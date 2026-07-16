@@ -23,7 +23,7 @@ def format_bucket_tag(bucket_key: str) -> str:
         return f"{info['icon']} {info['name']}"
     return f"📦 {bucket_key.capitalize()}"
 
-def process_user_dump(user_id: str, message_id: str, text: str, current_time_context: Optional[str] = None) -> Dict[str, Any]:
+async def process_user_dump(user_id: str, message_id: str, text: str, current_time_context: Optional[str] = None) -> Dict[str, Any]:
     """
     1. Log message in chat_messages table
     2. Call LLM to split / classify / extract
@@ -44,7 +44,7 @@ def process_user_dump(user_id: str, message_id: str, text: str, current_time_con
         # Continue processing anyway so the user's workflow isn't blocked
 
     # Step 2: Run LLM classification
-    classified_items = classify_dump(text, user_id, current_time_context)
+    classified_items = await classify_dump(text, user_id, current_time_context)
     
     response_items = []
     
@@ -57,7 +57,7 @@ def process_user_dump(user_id: str, message_id: str, text: str, current_time_con
         secondary = [b for b in secondary if b in BUCKET_INFO and b != primary]
         
         # Step 3: Save to the database
-        db_record = write_to_bucket(
+        db_record = await write_to_bucket(
             user_id=user_id,
             dump_id=message_id,
             bucket=primary,

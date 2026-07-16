@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 from pathlib import Path
 
 # Add backend directory to path
@@ -10,7 +11,7 @@ from backend.services.llm_service import classify_dump
 from backend.services.classification_service import process_user_dump
 from backend.config import settings
 
-def run_test_pipeline():
+async def run_test_pipeline():
     print("Starting AI Classification Pipeline verification...")
     
     # Check for API key
@@ -30,7 +31,7 @@ def run_test_pipeline():
     for text in test_inputs:
         print(f"\nProcessing Dump: '{text}'")
         try:
-            results = classify_dump(text, user_id)
+            results = await classify_dump(text, user_id)
             print("Classification Output:")
             for idx, item in enumerate(results):
                 print(f"  Item {idx+1}:")
@@ -43,4 +44,4 @@ def run_test_pipeline():
             print(f"  Error processing: {e}")
 
 if __name__ == "__main__":
-    run_test_pipeline()
+    asyncio.run(run_test_pipeline())
