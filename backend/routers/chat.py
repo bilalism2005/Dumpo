@@ -23,7 +23,8 @@ async def process_dump(
         response_data = process_user_dump(
             user_id=user_id,
             message_id=payload.message_id,
-            text=payload.text
+            text=payload.text,
+            current_time_context=payload.current_time_context
         )
         return response_data
     except Exception as e:

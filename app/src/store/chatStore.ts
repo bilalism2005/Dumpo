@@ -73,9 +73,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     
     try {
+      const timezoneOffset = new Date().getTimezoneOffset();
+      const offsetSign = timezoneOffset > 0 ? '-' : '+';
+      const offsetHours = String(Math.abs(Math.floor(timezoneOffset / 60))).padStart(2, '0');
+      const offsetMinutes = String(Math.abs(timezoneOffset % 60)).padStart(2, '0');
+      const tzOffset = `${offsetSign}${offsetHours}:${offsetMinutes}`;
+      
+      const localTimeContext = new Date(Date.now() - timezoneOffset * 60000)
+        .toISOString()
+        .slice(0, -1) + tzOffset;
+
       const response = await apiRequest('/api/v1/process', 'POST', {
         message_id: messageId,
-        text: text
+        text: text,
+        current_time_context: localTimeContext
       });
       
       if (response.success && response.items) {

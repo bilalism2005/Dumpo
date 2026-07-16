@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from backend.services.supabase_service import get_supabase_client
 from backend.services.llm_service import classify_dump
 from backend.services.bucket_service import write_to_bucket
@@ -23,7 +23,7 @@ def format_bucket_tag(bucket_key: str) -> str:
         return f"{info['icon']} {info['name']}"
     return f"📦 {bucket_key.capitalize()}"
 
-def process_user_dump(user_id: str, message_id: str, text: str) -> Dict[str, Any]:
+def process_user_dump(user_id: str, message_id: str, text: str, current_time_context: Optional[str] = None) -> Dict[str, Any]:
     """
     1. Log message in chat_messages table
     2. Call LLM to split / classify / extract
@@ -44,7 +44,7 @@ def process_user_dump(user_id: str, message_id: str, text: str) -> Dict[str, Any
         # Continue processing anyway so the user's workflow isn't blocked
 
     # Step 2: Run LLM classification
-    classified_items = classify_dump(text, user_id)
+    classified_items = classify_dump(text, user_id, current_time_context)
     
     response_items = []
     

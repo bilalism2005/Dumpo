@@ -5,6 +5,7 @@ from datetime import date, time
 class ProcessRequest(BaseModel):
     message_id: str
     text: str
+    current_time_context: Optional[str] = None
 
 class ExtractedTask(BaseModel):
     title: str

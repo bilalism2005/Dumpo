@@ -54,7 +54,7 @@ def write_to_bucket(
             if existing.data:
                 # Merge existing journal with new journal dump
                 old_entry = existing.data[0]
-                merged_content = merge_journals_narrative(old_entry.get("content", ""), extracted_data.get("content", ""))
+                merged_content = merge_journals_narrative(old_entry.get("content", ""), extracted_data.get("content", ""), journal_date)
                 # Combine secondary buckets
                 new_sec = list(set(old_entry.get("secondary_buckets", []) + secondary_buckets))
                 
