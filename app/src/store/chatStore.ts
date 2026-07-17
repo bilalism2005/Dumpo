@@ -167,16 +167,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
       
       const newTag = bucketIcons[toBucket] || `📦 ${toBucket.toUpperCase()}`;
-      item.primary_bucket = toBucket;
-      if (response && response.new_id) {
-        item.id = response.new_id;
-      }
+      // We must map it completely so React triggers state update
+      msg.items = [{ ...item, primary_bucket: toBucket, id: response?.new_id || item.id }];
       msg.bucket_tags = [newTag];
       msg.content = `Moved to ${toBucket.toUpperCase()}.`;
       
       set({ messages: msgs });
     } catch (error) {
       console.error("Failed to reclassify message item", error);
+      import('react-native').then(({ Alert }) => {
+        Alert.alert("Failed to change bucket", String(error));
+      });
     }
   }
 }));
