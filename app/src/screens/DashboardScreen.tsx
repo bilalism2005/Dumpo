@@ -140,11 +140,17 @@ const styles = StyleSheet.create({
   header: {
     marginVertical: 12,
   },
-  title: {
+  headerTitle: {
     fontFamily: 'System',
     fontSize: 28,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  headerSubtitle: {
+    fontFamily: 'System',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 4,
   },
   section: {
     marginBottom: 24,

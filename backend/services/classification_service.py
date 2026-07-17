@@ -68,7 +68,17 @@ async def process_user_dump(user_id: str, message_id: str, text: str, current_ti
         
         # Step 4: Construct the response details
         info = BUCKET_INFO.get(primary, BUCKET_INFO["others"])
-        confirmation = info["confirmation"]
+        
+        # Try to extract a title to provide specific confirmation
+        item_title = extracted.get("title") or extracted.get("description") or extracted.get("content") or extracted.get("raw_text")
+        
+        if item_title:
+            # Keep title short
+            if len(item_title) > 30:
+                item_title = item_title[:27] + "..."
+            confirmation = f"'{item_title}' saved to {info['name']}."
+        else:
+            confirmation = info["confirmation"]
         
         # Format tags
         bucket_tags = [format_bucket_tag(primary)]
