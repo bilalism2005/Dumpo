@@ -55,6 +55,7 @@ class ProcessedItem(BaseModel):
     extracted: Dict[str, Any]
 
 class ProcessResponseItem(BaseModel):
+    id: Optional[str] = None
     primary_bucket: str
     secondary_buckets: List[str] = Field(default_factory=list)
     bucket_tags: List[str]
