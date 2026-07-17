@@ -26,6 +26,13 @@ async def get_dashboard(
             .eq("due_date", current_date)\
             .order("created_at", desc=False)\
             .execute()
+
+        # Fetch someday tasks (both complete and incomplete)
+        someday_tasks_res = supabase.table("tasks")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .is_("due_date", "null")\
+            .execute()
             
         # Fetch overdue tasks (incomplete only, due before today)
         overdue_tasks_res = supabase.table("tasks")\
@@ -37,11 +44,13 @@ async def get_dashboard(
             .execute()
             
         today_tasks = today_tasks_res.data if today_tasks_res.data else []
+        someday_tasks = someday_tasks_res.data if someday_tasks_res.data else []
         overdue_tasks = overdue_tasks_res.data if overdue_tasks_res.data else []
         
         return {
             "success": True,
             "today_tasks": today_tasks,
+            "someday_tasks": someday_tasks,
             "overdue_tasks": overdue_tasks,
             "overdue_count": len(overdue_tasks)
         }

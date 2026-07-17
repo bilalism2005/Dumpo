@@ -5,6 +5,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface DashboardState {
   todayTasks: any[];
+  somedayTasks: any[];
   overdueTasks: any[];
   overdueCount: number;
   bucketItems: Record<string, any[]>;
@@ -25,6 +26,7 @@ interface DashboardState {
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   todayTasks: [],
+  somedayTasks: [],
   overdueTasks: [],
   overdueCount: 0,
   bucketItems: {},
@@ -40,6 +42,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       
       set({
         todayTasks: response.today_tasks || [],
+        somedayTasks: response.someday_tasks || [],
         overdueTasks: response.overdue_tasks || [],
         overdueCount: response.overdue_count || 0,
         isLoading: false
@@ -72,6 +75,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     if (taskIndex !== -1) {
       currentToday[taskIndex].is_complete = !currentToday[taskIndex].is_complete;
       set({ todayTasks: currentToday });
+    }
+
+    const currentSomeday = [...get().somedayTasks];
+    const somedayIndex = currentSomeday.findIndex(t => t.id === taskId);
+    if (somedayIndex !== -1) {
+      currentSomeday[somedayIndex].is_complete = !currentSomeday[somedayIndex].is_complete;
+      set({ somedayTasks: currentSomeday });
     }
     
     try {

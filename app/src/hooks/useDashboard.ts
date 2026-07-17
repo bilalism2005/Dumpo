@@ -6,6 +6,7 @@ export function useDashboard() {
   const { user } = useAuthStore();
   const {
     todayTasks,
+    somedayTasks,
     overdueTasks,
     overdueCount,
     bucketItems,
@@ -36,6 +37,7 @@ export function useDashboard() {
 
   return {
     todayTasks,
+    somedayTasks,
     overdueTasks,
     overdueCount,
     bucketItems,

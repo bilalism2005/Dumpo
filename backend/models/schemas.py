@@ -78,6 +78,7 @@ class DashboardTaskItem(BaseModel):
 class DashboardResponse(BaseModel):
     success: bool
     today_tasks: List[DashboardTaskItem]
+    someday_tasks: List[DashboardTaskItem] = []
     overdue_count: int
 
 class BucketItemUpdateRequest(BaseModel):

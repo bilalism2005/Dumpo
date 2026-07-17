@@ -134,12 +134,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const msgs = [...get().messages];
     const msg = msgs[msgIndex];
     if (!msg || !msg.items) return;
-    const item = msg.items[itemIndex];
+    const item = msg.items[0];
     if (!item) return;
 
     try {
       // Call backend to reclassify
-      await apiRequest(`/api/v1/items/${item.primary_bucket}/${item.id}/reclassify`, 'PATCH', {
+      const response = await apiRequest(`/api/v1/items/${item.primary_bucket}/${item.id}/reclassify`, 'PATCH', {
         to_bucket: toBucket
       });
       
@@ -156,6 +156,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       
       const newTag = bucketIcons[toBucket] || `📦 ${toBucket.toUpperCase()}`;
       item.primary_bucket = toBucket;
+      if (response && response.new_id) {
+        item.id = response.new_id;
+      }
       msg.bucket_tags = [newTag];
       msg.content = `Moved to ${toBucket.toUpperCase()}.`;
       

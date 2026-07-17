@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, SafeAreaView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { ChatInput } from '../components/chat/ChatInput';
 import { BucketBottomSheet } from '../components/shared/BucketBottomSheet';
@@ -76,7 +77,7 @@ export function ChatScreen() {
           renderItem={({ item, index }) => (
             <MessageBubble 
               message={item} 
-              onTapTag={(bucketKey, itemIdx) => handleTapTag(bucketKey, index, itemIdx)}
+              onTapTag={() => handleTapTag(item.items?.[0]?.primary_bucket || "others", index, 0)}
             />
           )}
           contentContainerStyle={styles.messagesList}

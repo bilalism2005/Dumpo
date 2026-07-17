@@ -20,7 +20,7 @@ export default function IndexRoute() {
 
   // Redirect based on session status
   if (session) {
-    return <Redirect href="/(app)/chat" />;
+    return <Redirect href="/(app)" />;
   }
 
   return <Redirect href="/auth/login" />;

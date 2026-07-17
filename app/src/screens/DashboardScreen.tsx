@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ProgressBar } from '../components/dashboard/ProgressBar';
 import { BucketGrid } from '../components/dashboard/BucketGrid';
 import { useDashboard } from '../hooks/useDashboard';
@@ -8,15 +9,22 @@ import { router } from 'expo-router';
 export function DashboardScreen() {
   const { 
     todayTasks, 
+    somedayTasks = [],
     overdueTasks, 
     overdueCount, 
     isLoading, 
     toggleTaskComplete 
   } = useDashboard();
 
-  // Calculate completion percentage for today's tasks
-  const completedToday = todayTasks.filter(t => t.is_complete).length;
-  const totalToday = todayTasks.length;
+  // Combine today's and someday's tasks
+  const combinedTasks = [...todayTasks, ...somedayTasks];
+
+  // Sort combined tasks by created_at descending (latest entry first)
+  combinedTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  // Calculate completion percentage based on combined tasks
+  const completedCombined = combinedTasks.filter(t => t.is_complete).length;
+  const totalCombined = combinedTasks.length;
 
   const handleTapBucket = (bucketKey: string) => {
     // Navigate to the specific bucket screen
@@ -33,37 +41,43 @@ export function DashboardScreen() {
 
         {/* Section 1: Today's To-Do & Progress */}
         <View style={styles.section}>
-          <ProgressBar completed={completedToday} total={totalToday} />
+          <ProgressBar completed={completedCombined} total={totalCombined} />
           
-          {/* Today's Tasks List */}
-          <Text style={styles.sectionHeader}>Today's Tasks</Text>
-          {totalToday === 0 ? (
+          {/* Combined Tasks List (Scrollable Card) */}
+          <Text style={styles.sectionHeader}>Tasks List</Text>
+          {totalCombined === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No tasks due today</Text>
+              <Text style={styles.emptyStateText}>No tasks for today or someday</Text>
             </View>
           ) : (
-            <View style={styles.taskList}>
-              {todayTasks.map((task) => (
-                <TouchableOpacity 
-                  key={task.id} 
-                  style={styles.taskItem}
-                  onPress={() => toggleTaskComplete(task.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[
-                    styles.checkbox,
-                    task.is_complete && styles.checkboxChecked
-                  ]}>
-                    {task.is_complete && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                  <Text style={[
-                    styles.taskText,
-                    task.is_complete && styles.taskTextCompleted
-                  ]}>
-                    {task.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.taskListCard}>
+              <ScrollView 
+                style={styles.tasksScrollContainer} 
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
+                {combinedTasks.map((task) => (
+                  <TouchableOpacity 
+                    key={task.id} 
+                    style={styles.taskItem}
+                    onPress={() => toggleTaskComplete(task.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[
+                      styles.checkbox,
+                      task.is_complete && styles.checkboxChecked
+                    ]}>
+                      {task.is_complete && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={[
+                      styles.taskText,
+                      task.is_complete && styles.taskTextCompleted
+                    ]}>
+                      {task.title}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -202,5 +216,15 @@ const styles = StyleSheet.create({
   },
   overdueTaskText: {
     color: '#ef4444',
+  },
+  taskListCard: {
+    backgroundColor: '#13131c',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    paddingVertical: 4,
+  },
+  tasksScrollContainer: {
+    maxHeight: 220,
   },
 });
