@@ -35,7 +35,8 @@ async def process_user_dump(user_id: str, message_id: str, text: str, current_ti
         message_data = {
             "id": message_id,
             "user_id": user_id,
-            "content": text
+            "content": text,
+            "role": "user"
         }
         supabase.table("chat_messages").insert(message_data).execute()
         
@@ -90,7 +91,7 @@ async def process_user_dump(user_id: str, message_id: str, text: str, current_ti
         # Incorporate the generated DB ID into the response so client can track
         record_id = db_record.get("id") if db_record else None
         
-        response_items.append({
+        item_payload = {
             "id": record_id,
             "primary_bucket": primary,
             "secondary_buckets": secondary,
@@ -99,7 +100,24 @@ async def process_user_dump(user_id: str, message_id: str, text: str, current_ti
             "reminder_set": reminder_set,
             "reminder_text": reminder_text,
             "extracted": extracted
-        })
+        }
+        
+        response_items.append(item_payload)
+        
+        # Save corresponding assistant message row to unified chat_messages log
+        try:
+            assistant_msg = {
+                "user_id": user_id,
+                "content": confirmation,
+                "role": "assistant",
+                "bucket_tags": bucket_tags,
+                "reminder_set": reminder_set,
+                "reminder_text": reminder_text,
+                "items": [item_payload]
+            }
+            supabase.table("chat_messages").insert(assistant_msg).execute()
+        except Exception as msg_err:
+            logger.error(f"Failed to save assistant chat message log: {str(msg_err)}", exc_info=True)
         
     return {
         "success": True,

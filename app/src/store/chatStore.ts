@@ -20,7 +20,7 @@ interface ChatState {
   fetchMessages: () => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   clearChat: () => void;
-  reclassifyMessageItem: (msgIndex: number, itemIndex: number, toBucket: string) => Promise<void>;
+  reclassifyMessageItem: (messageId: string, toBucket: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -31,21 +31,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
   fetchMessages: async () => {
     set({ isLoading: true });
     try {
-      // In a real app, we would fetch chat history from Supabase:
-      // const res = await supabase.table("chat_messages").select("*")...
-      // For the MVP, we can fetch the user's raw logs or mock/load state if empty.
-      // If messages list is empty, prepend the welcome message:
-      const msgs = get().messages;
-      if (msgs.length === 0) {
-        set({
-          messages: [{
-            id: 'welcome',
-            role: 'assistant',
-            content: "Hey, I'm Dumpo. Drop anything on your mind. I'll take care of the rest.",
-            created_at: new Date().toISOString()
-          }],
-          isLoading: false
-        });
+      const response = await apiRequest('/api/v1/chat/history', 'GET');
+      if (response.success && response.messages) {
+        if (response.messages.length === 0) {
+          set({
+            messages: [{
+              id: 'welcome',
+              role: 'assistant',
+              content: "Hey, I'm Dumpo. Drop anything on your mind. I'll take care of the rest.",
+              created_at: new Date().toISOString()
+            }],
+            isLoading: false
+          });
+        } else {
+          set({
+            messages: response.messages,
+            isLoading: false
+          });
+        }
       } else {
         set({ isLoading: false });
       }
@@ -130,9 +133,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ messages: [] });
   },
 
-  reclassifyMessageItem: async (msgIndex, itemIndex, toBucket) => {
+  reclassifyMessageItem: async (messageId, toBucket) => {
     const msgs = [...get().messages];
-    const msg = msgs[msgIndex];
+    const msg = msgs.find(m => m.id === messageId);
     if (!msg || !msg.items) return;
     const item = msg.items[0];
     if (!item) return;

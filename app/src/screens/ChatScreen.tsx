@@ -12,7 +12,7 @@ export function ChatScreen() {
   const { user } = useAuthStore();
   
   const [sheetVisible, setSheetVisible] = useState(false);
-  const [selectedItemInfo, setSelectedItemInfo] = useState<{ msgIndex: number; itemIndex: number; currentBucket: string } | null>(null);
+  const [selectedItemInfo, setSelectedItemInfo] = useState<{ messageId: string; currentBucket: string } | null>(null);
   
   const flatListRef = useRef<FlatList>(null);
 
@@ -29,10 +29,9 @@ export function ChatScreen() {
     sendMessage(text);
   };
 
-  const handleTapTag = (bucketKey: string, msgIndex: number, itemIdx: number) => {
+  const handleTapTag = (bucketKey: string, messageId: string) => {
     setSelectedItemInfo({
-      msgIndex,
-      itemIndex: itemIdx,
+      messageId,
       currentBucket: bucketKey
     });
     setSheetVisible(true);
@@ -41,8 +40,7 @@ export function ChatScreen() {
   const handleSelectReclassify = (toBucket: string) => {
     if (selectedItemInfo) {
       reclassifyMessageItem(
-        selectedItemInfo.msgIndex,
-        selectedItemInfo.itemIndex,
+        selectedItemInfo.messageId,
         toBucket
       );
       setSelectedItemInfo(null);
@@ -70,25 +68,33 @@ export function ChatScreen() {
         </View>
 
         {/* 2. Messages List */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => (
-            <MessageBubble 
-              message={item} 
-              onTapTag={() => handleTapTag(item.items?.[0]?.primary_bucket || "others", index, 0)}
-            />
-          )}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          ListFooterComponent={isLoading ? (
-            <View style={styles.loaderContainer}>
-              <ActivityIndicator color="#a855f7" size="small" />
-              <Text style={styles.loaderText}>Dumpo is processing...</Text>
-            </View>
-          ) : null}
-        />
+        {isLoading && messages.length <= 1 ? (
+          <View style={styles.historyLoader}>
+            <ActivityIndicator color="#a855f7" size="large" />
+            <Text style={styles.historyLoaderText}>Loading chat history...</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <MessageBubble 
+                message={item} 
+                onTapTag={() => handleTapTag(item.items?.[0]?.primary_bucket || "others", item.id)}
+              />
+            )}
+            contentContainerStyle={styles.messagesList}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListFooterComponent={isLoading ? (
+              <View style={styles.loaderContainer}>
+                <ActivityIndicator color="#a855f7" size="small" />
+                <Text style={styles.loaderText}>Dumpo is processing...</Text>
+              </View>
+            ) : null}
+          />
+        )}
 
         {/* 3. Input Bar */}
         <ChatInput onSend={handleSend} disabled={isLoading} />
@@ -166,5 +172,16 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.5)',
+  },
+  historyLoader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  historyLoaderText: {
+    fontFamily: 'System',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.4)',
   },
 });

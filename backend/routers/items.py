@@ -341,6 +341,58 @@ async def reclassify_item(
         # 4. Delete source item
         supabase.table(from_bucket).delete().eq("id", item_id).eq("user_id", user_id).execute()
         
+        # Update the assistant message log inside the unified chat_messages table
+        try:
+            bucket_icons = {
+                "tasks": "✅ Tasks",
+                "ideas": "💡 Ideas",
+                "journals": "📓 Journal",
+                "finance": "💰 Finance",
+                "health": "❤️ Health",
+                "watchlist": "🎬 Watchlist",
+                "others": "📦 Others"
+            }
+            new_tag = bucket_icons.get(to_bucket, f"📦 {to_bucket.capitalize()}")
+            
+            # Fetch user assistant messages to find the one associated with this item_id
+            msg_res = supabase.table("chat_messages")\
+                .select("*")\
+                .eq("user_id", user_id)\
+                .eq("role", "assistant")\
+                .execute()
+                
+            if msg_res.data:
+                for msg_row in msg_res.data:
+                    msg_items = msg_row.get("items", [])
+                    if any(str(i.get("id")) == str(item_id) for i in msg_items):
+                        updated_items = []
+                        for i in msg_items:
+                            if str(i.get("id")) == str(item_id):
+                                # Re-serialize the item payload
+                                updated_item = {
+                                    "id": new_item_id,
+                                    "primary_bucket": to_bucket,
+                                    "secondary_buckets": target_data["secondary_buckets"],
+                                    "bucket_tags": [new_tag],
+                                    "confirmation_text": f"Moved to {to_bucket.upper()}.",
+                                    "reminder_set": False,
+                                    "reminder_text": None,
+                                    "extracted": target_data
+                                }
+                                updated_items.append(updated_item)
+                            else:
+                                updated_items.append(i)
+                                
+                        update_payload = {
+                            "content": f"Moved to {to_bucket.upper()}.",
+                            "bucket_tags": [new_tag],
+                            "items": updated_items
+                        }
+                        supabase.table("chat_messages").update(update_payload).eq("id", msg_row["id"]).execute()
+                        break
+        except Exception as msg_update_err:
+            logger.error(f"Failed to update chat message history log on reclassify: {str(msg_update_err)}", exc_info=True)
+        
         # 5. Log change in bucket_changes
         change_log = {
             "user_id": user_id,

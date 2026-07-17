@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS public.chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
     content TEXT NOT NULL,
+    role TEXT DEFAULT 'user' NOT NULL,
+    bucket_tags TEXT[] DEFAULT '{}'::TEXT[] NOT NULL,
+    reminder_set BOOLEAN DEFAULT FALSE NOT NULL,
+    reminder_text TEXT,
+    items JSONB DEFAULT '[]'::JSONB NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 

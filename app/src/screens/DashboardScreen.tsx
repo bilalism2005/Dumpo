@@ -33,15 +33,26 @@ export function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safeContainer}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Dashboard</Text>
+      {isLoading ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator color="#a855f7" size="large" />
+          <Text style={styles.loaderText}>Waking up Dumpo backend...</Text>
+          <Text style={styles.loaderSubtext}>This can take up to 50 seconds if the app was idle.</Text>
         </View>
+      ) : (
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header Title */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Dashboard</Text>
+            <Text style={styles.headerSubtitle}>Keep your thought streams clear</Text>
+          </View>
 
-        {/* Section 1: Today's To-Do & Progress */}
-        <View style={styles.section}>
-          <ProgressBar completed={completedCombined} total={totalCombined} />
+          {/* Section 1: Today's To-Do & Progress */}
+          <View style={styles.section}>
+            <ProgressBar completed={completedCombined} total={totalCombined} />
           
           {/* Combined Tasks List (Scrollable Card) */}
           <Text style={styles.sectionHeader}>Tasks List</Text>
@@ -112,6 +123,7 @@ export function DashboardScreen() {
           <BucketGrid onTapBucket={handleTapBucket} />
         </View>
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -226,5 +238,25 @@ const styles = StyleSheet.create({
   },
   tasksScrollContainer: {
     maxHeight: 220,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 8,
+  },
+  loaderText: {
+    fontFamily: 'System',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginTop: 12,
+  },
+  loaderSubtext: {
+    fontFamily: 'System',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.4)',
+    textAlign: 'center',
   },
 });
