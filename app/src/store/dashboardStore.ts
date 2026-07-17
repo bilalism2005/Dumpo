@@ -13,7 +13,7 @@ interface DashboardState {
   error: string | null;
   realtimeChannel: RealtimeChannel | null;
   
-  fetchDashboard: (currentDate?: string) => Promise<void>;
+  fetchDashboard: (currentDate?: string, silent?: boolean) => Promise<void>;
   fetchBucketItems: (bucketName: string) => Promise<void>;
   toggleTaskComplete: (taskId: string) => Promise<void>;
   toggleTaskReminder: (taskId: string) => Promise<void>;
@@ -34,8 +34,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   error: null,
   realtimeChannel: null,
   
-  fetchDashboard: async (currentDate) => {
-    set({ isLoading: true });
+  fetchDashboard: async (currentDate, silent = false) => {
+    if (!silent) set({ isLoading: true });
     try {
       const dateParam = currentDate ? `?current_date=${currentDate}` : '';
       const response = await apiRequest(`/api/v1/dashboard${dateParam}`, 'GET');
@@ -73,31 +73,35 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const currentToday = [...get().todayTasks];
     const taskIndex = currentToday.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
-      currentToday[taskIndex].is_complete = !currentToday[taskIndex].is_complete;
+      const isComplete = !currentToday[taskIndex].is_complete;
+      currentToday[taskIndex].is_complete = isComplete;
+      currentToday[taskIndex].completed_at = isComplete ? new Date().toISOString() : null;
       set({ todayTasks: currentToday });
     }
 
     const currentSomeday = [...get().somedayTasks];
     const somedayIndex = currentSomeday.findIndex(t => t.id === taskId);
     if (somedayIndex !== -1) {
-      currentSomeday[somedayIndex].is_complete = !currentSomeday[somedayIndex].is_complete;
+      const isComplete = !currentSomeday[somedayIndex].is_complete;
+      currentSomeday[somedayIndex].is_complete = isComplete;
+      currentSomeday[somedayIndex].completed_at = isComplete ? new Date().toISOString() : null;
       set({ somedayTasks: currentSomeday });
     }
     
     try {
       await apiRequest(`/api/v1/tasks/${taskId}/complete`, 'PATCH');
-      await get().fetchDashboard();
+      await get().fetchDashboard(undefined, true);
     } catch (error) {
       console.error("Failed to complete task", error);
       // Revert if API failed
-      await get().fetchDashboard();
+      await get().fetchDashboard(undefined, true);
     }
   },
   
   toggleTaskReminder: async (taskId) => {
     try {
       await apiRequest(`/api/v1/tasks/${taskId}/reminder`, 'PATCH');
-      await get().fetchDashboard();
+      await get().fetchDashboard(undefined, true);
     } catch (error) {
       console.error("Failed to toggle reminder", error);
     }
@@ -131,7 +135,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       
       // Refresh dashboard if it was a task change
       if (bucket === "tasks") {
-        await get().fetchDashboard();
+        await get().fetchDashboard(undefined, true);
       }
     } catch (error) {
       console.error("Failed to update bucket item", error);
@@ -159,7 +163,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         // Refresh both source and target buckets
         await get().fetchBucketItems(bucket);
         await get().fetchBucketItems(toBucket);
-        await get().fetchDashboard();
+        await get().fetchDashboard(undefined, true);
       }
     } catch (error) {
       console.error("Failed to reclassify item", error);
@@ -175,7 +179,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           bucketItems: { ...state.bucketItems, [bucket]: items }
         };
       });
-      await get().fetchDashboard();
+      await get().fetchDashboard(undefined, true);
     } catch (error) {
       console.error("Failed to delete item", error);
     }
@@ -195,7 +199,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         { event: '*', schema: 'public', table: table, filter: `user_id=eq.${userId}` },
         (payload) => {
           // Trigger silent background refresh
-          get().fetchDashboard();
+          get().fetchDashboard(undefined, true);
           // Also refresh any cached bucket lists
           const cachedBuckets = Object.keys(get().bucketItems);
           if (cachedBuckets.includes(table)) {

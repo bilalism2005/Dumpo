@@ -19,8 +19,20 @@ export function DashboardScreen() {
   // Combine today's and someday's tasks
   const combinedTasks = [...todayTasks, ...somedayTasks];
 
-  // Sort combined tasks by created_at descending (latest entry first)
-  combinedTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  // Sort combined tasks: unticked at top, ticked at bottom.
+  // Within unticked: sort by created_at desc. Within ticked: sort by completed_at desc.
+  combinedTasks.sort((a, b) => {
+    if (a.is_complete && !b.is_complete) return 1;
+    if (!a.is_complete && b.is_complete) return -1;
+    
+    if (a.is_complete && b.is_complete) {
+      const aTime = a.completed_at ? new Date(a.completed_at).getTime() : 0;
+      const bTime = b.completed_at ? new Date(b.completed_at).getTime() : 0;
+      return bTime - aTime;
+    }
+    
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 
   // Calculate completion percentage based on combined tasks
   const completedCombined = combinedTasks.filter(t => t.is_complete).length;

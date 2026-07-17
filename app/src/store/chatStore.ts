@@ -134,7 +134,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   reclassifyMessageItem: async (messageId, toBucket) => {
-    const msgs = [...get().messages];
+    const msgs = get().messages.map(m => {
+      if (m.id === messageId) {
+        return { 
+          ...m, 
+          items: m.items ? m.items.map(i => ({ ...i })) : undefined 
+        };
+      }
+      return m;
+    });
+    
     const msg = msgs.find(m => m.id === messageId);
     if (!msg || !msg.items) return;
     const item = msg.items[0];

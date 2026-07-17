@@ -36,6 +36,7 @@ export default function AuthenticatedIndex() {
         scrollEventThrottle={16}
         bounces={false}
         contentContainerStyle={{ width: SCREEN_WIDTH * 2 }}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
           <DashboardScreen />
