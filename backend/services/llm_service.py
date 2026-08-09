@@ -27,7 +27,10 @@ FORMAT:
       "action_type": "CREATE" | "CRUD" | "CHAT",
       "primary_bucket": "string or null",
       "formatted_text": "string", 
-      "extracted": "object or null"
+      "extracted": "object or null",
+      "resolved_id": "string or null",
+      "operation": "string or null",
+      "update_fields": "object or null"
     } 
   ] 
 }
@@ -40,16 +43,27 @@ STEP 2 — DUMP TYPE:
 - mixed: A combination of both (e.g., "Today was tiring. Also remind me to pay rent.").
 
 STEP 3 — JOURNAL SEGMENT: If dump_type is narrative or mixed, extract the continuous story part into `journal_segment`. Otherwise null.
+- IMPORTANT: If the Memory Context contains a journal for today's date, set journal_segment to the narrative text as usual — the system will handle merging automatically.
 
 STEP 4 — SPLIT & ROUTE ATOMIC ITEMS: If dump_type is atomic or mixed, split the atomic parts into distinct items in the "atomic_items" array.
 For each item, determine its `action_type`:
-- CREATE: Adding a new item to a bucket (new task, idea, finance entry, movie to watch, etc.).
-- CRUD: Reading, Updating, or Deleting an EXISTING item (e.g., "Cancel my meeting with John", "I watched Interstellar", "Did I pay Alice?"). USE THE PROVIDED MEMORY CONTEXT to determine if an entity already exists!
-- CHAT: General conversational questions not related to user's data (e.g., "Should I work on my body?", "What's the capital of France?").
+- CREATE: Adding a brand new item (no match in memory context).
+- CRUD: Operating on an EXISTING item. USE THE MEMORY CONTEXT to determine if an entity exists.
+- CHAT: General conversational question unrelated to user's stored data.
+
+For CRUD items, you MUST populate these extra fields:
+- "resolved_id": the exact "id" value of the matching item from Memory Context, or null if not confidently found.
+- "operation": one of "UPDATE" | "DELETE" | "APPEND" | "READ"
+  - UPDATE: Modify a field (e.g., "Change meeting with John to 5pm", "Mark Aryan's debt as settled")
+  - DELETE: Remove an item (e.g., "Cancel my meeting with John", "Delete the gym task")
+  - APPEND: Add content to existing item, only for journals (e.g., "Also add that I had pizza for lunch")
+  - READ: Query without modification (e.g., "When is my meeting with John?", "Did I pay Alice?")
+- "update_fields": object with only the specific fields to change for UPDATE operations, null otherwise.
 
 STEP 5 — CLASSIFY (CREATE & CRUD only):
-Classify into primary_bucket: tasks | ideas | journals (rare for atomic) | finance | health | watchlist | others.
-- Note on Watchlist: Any mention of a recognizable movie, TV show, anime, or documentary (e.g., "Houseful 4", "Inception", "Naruto") MUST be classified into the `watchlist` bucket, even if the word 'watch' is not explicitly used.
+Classify into primary_bucket: tasks | ideas | journals | finance | health | watchlist | others.
+- Watchlist: Any recognizable movie, show, anime, or documentary name (e.g., "Houseful 4", "Inception", "Naruto") MUST go to watchlist, even without the word "watch".
+- "I watched Interstellar" → CRUD, watchlist, operation: UPDATE, update_fields: { "is_watched": true }, resolved_id from memory.
 
 STEP 6 — EXTRACT (CREATE only): Populate the exact fields defined in the schema for that item's primary_bucket inside "extracted".
 """
