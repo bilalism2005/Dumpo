@@ -474,19 +474,54 @@ async def crud_node(state: AgentState) -> AgentState:
 
 
 
+CHATBOT_SYSTEM_PROMPT = """You are Dumpo, a warm, intelligent, and helpful AI assistant for the Dumpo productivity app.
+Your name is Dumpo. You are concise, friendly, and helpful. You remember details shared by the user in previous conversation turns.
+Always maintain your identity as Dumpo and refer to yourself as Dumpo when asked."""
+
+
 async def chatbot_node(state: AgentState) -> AgentState:
+    user_id = state["user_id"]
+    loop = asyncio.get_running_loop()
+
+    # Fetch recent conversation history from chat_messages table (last 10 turns)
+    recent_history = []
+    try:
+        history_res = await loop.run_in_executor(None, lambda:
+            supabase.table("chat_messages")
+                .select("role, content")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(10).execute()
+        )
+        if history_res.data:
+            recent_history = list(reversed(history_res.data))
+    except Exception as e:
+        logger.error(f"Failed to fetch chat history for chatbot_node: {e}")
+
     chat_responses = []
     for item in state.get("atomic_items", []):
         if item.get("action_type") != "CHAT":
             continue
         text = item.get("formatted_text", "")
+        
+        # Build prompt payload: System Persona + Recent Chat History + Current Prompt
+        messages = [{"role": "system", "content": CHATBOT_SYSTEM_PROMPT}]
+        for msg in recent_history:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role in ["user", "assistant"] and content:
+                messages.append({"role": role, "content": content})
+        
+        # Prevent duplicating the current message if already logged
+        if not messages or messages[-1]["content"] != text:
+            messages.append({"role": "user", "content": text})
+
         try:
-            loop = asyncio.get_running_loop()
             completion = await loop.run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
                     model=MODEL_NAME,
-                    messages=[{"role": "user", "content": text}],
+                    messages=messages,
                     temperature=0.7
                 )
             )
@@ -498,6 +533,7 @@ async def chatbot_node(state: AgentState) -> AgentState:
             })
         except Exception as e:
             logger.error(f"Chatbot failed: {e}")
+
     return {"items": chat_responses, "success": True}
 
 
