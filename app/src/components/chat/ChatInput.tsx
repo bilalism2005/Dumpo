@@ -10,8 +10,8 @@ interface ChatInputProps {
 export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
   const [inputText, setInputText] = useState('');
   
-  const { isListening, startListening, stopListening } = useVoiceInput((result) => {
-    setInputText(result);
+  const { isListening, isTranscribing, startListening, stopListening } = useVoiceInput((result) => {
+    setInputText((prev) => (prev ? `${prev} ${result}` : result));
   });
 
   const handleSend = () => {
@@ -37,23 +37,33 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
           isListening && styles.micActiveButton
         ]} 
         onPress={handleMicPress}
-        disabled={disabled}
+        disabled={disabled || isTranscribing}
       >
-        <Text style={styles.iconText}>
-          {isListening ? '🔴' : '🎤'}
-        </Text>
+        {isTranscribing ? (
+          <ActivityIndicator color="#a855f7" size="small" />
+        ) : (
+          <Text style={styles.iconText}>
+            {isListening ? '🔴' : '🎤'}
+          </Text>
+        )}
       </TouchableOpacity>
       
       {/* 2. Text Input (Middle) */}
       <TextInput
         value={inputText}
         onChangeText={setInputText}
-        placeholder={isListening ? "Listening to your thoughts..." : (disabled ? "Processing..." : "What's on your mind?")}
+        placeholder={
+          isListening 
+            ? "Recording... tap mic to finish" 
+            : (isTranscribing 
+                ? "Transcribing voice dump..." 
+                : (disabled ? "Processing..." : "What's on your mind?"))
+        }
         placeholderTextColor="rgba(255, 255, 255, 0.4)"
-        style={[styles.textInput, disabled && styles.textInputDisabled]}
+        style={[styles.textInput, (disabled || isTranscribing) && styles.textInputDisabled]}
         multiline={true}
         maxHeight={100}
-        editable={!disabled}
+        editable={!disabled && !isTranscribing}
       />
       
       {/* 3. Send Button (Right) */}

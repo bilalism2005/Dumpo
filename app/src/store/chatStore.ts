@@ -23,6 +23,8 @@ interface ChatState {
   reclassifyMessageItem: (messageId: string, toBucket: string) => Promise<void>;
 }
 
+import { scheduleTaskReminder } from '../services/notificationService';
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoading: false,
@@ -93,6 +95,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
       
       if (response.success && response.items) {
+        // Trigger OS notification scheduling for any task reminders
+        response.items.forEach((item: any) => {
+          if (item.reminder_set || (item.primary_bucket === 'tasks' && item.extracted?.reminder_required)) {
+            scheduleTaskReminder({
+              id: item.id || messageId,
+              title: item.extracted?.title || item.confirmation_text || 'Task Reminder',
+              due_date: item.extracted?.due_date,
+              due_time: item.extracted?.due_time,
+            });
+          }
+        });
+
         // Map API response to assistant message bubbles
         const assistantMsgs: ChatMessage[] = response.items.map((item: any, idx: number) => ({
           id: `${messageId}-resp-${idx}`,
@@ -102,7 +116,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           reminder_set: item.reminder_set,
           reminder_text: item.reminder_text,
           created_at: new Date().toISOString(),
-          items: [item] // Save detailed item data for reclassification
+          items: [item]
         }));
         
         set((state) => ({

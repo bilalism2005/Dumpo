@@ -1,127 +1,123 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Platform } from 'react-native';
+import { Audio } from 'expo-av';
+import { API_URL } from '../config';
+import { useAuthStore } from '../store/authStore';
 
 interface UseVoiceInputResult {
   isListening: boolean;
-  transcript: string;
-  startListening: () => void;
-  stopListening: () => void;
-  clearTranscript: () => void;
-  isSupported: boolean;
+  isTranscribing: boolean;
+  startListening: () => Promise<void>;
+  stopListening: () => Promise<void>;
 }
 
 export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputResult {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const recognitionRef = useRef<any>(null);
-
-  const isSupported = Platform.OS === 'web' && 
-    (typeof window !== 'undefined' && 
-     ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window));
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
 
   useEffect(() => {
-    if (isSupported) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const rec = new SpeechRecognition();
-      rec.continuous = false;
-      rec.interimResults = true;
-      rec.lang = 'en-IN'; // Indian English default, perfect for urban Indian professionals!
-
-      rec.onstart = () => {
-        setIsListening(true);
-      };
-
-      rec.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-
-        const currentText = finalTranscript || interimTranscript;
-        setTranscript(currentText);
-        if (onResult && finalTranscript) {
-          onResult(finalTranscript);
-        }
-      };
-
-      rec.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
-
-      rec.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = rec;
-    }
-
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
       }
     };
-  }, [isSupported]);
+  }, []);
 
-  const startListening = () => {
-    if (recognitionRef.current) {
-      try {
-        setTranscript('');
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error('Failed to start speech recognition', e);
+  const startListening = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        alert('Voice recording is designed for native mobile devices.');
+        return;
       }
-    } else {
-      // Mock/simulate voice input on simulator/native for demonstration
-      setIsListening(true);
-      let count = 0;
-      const demoPhrases = [
-        "Spent 450 rupees on groceries and buy milk tomorrow morning",
-        "Had a great idea for a hostel mess food quality tracking app",
-        "Slept only 4 hours last night feeling very tired today",
-        "Need to complete the report by Friday afternoon at 3pm"
-      ];
-      const randomPhrase = demoPhrases[Math.floor(Math.random() * demoPhrases.length)];
-      
-      const interval = setInterval(() => {
-        count++;
-        const words = randomPhrase.split(' ');
-        const partial = words.slice(0, Math.ceil((words.length * count) / 5)).join(' ');
-        setTranscript(partial);
-        
-        if (count >= 5) {
-          clearInterval(interval);
-          setIsListening(false);
-          if (onResult) onResult(randomPhrase);
-        }
-      }, 500);
-    }
-  };
 
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    } else {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Microphone permission is required to record audio dumps.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+
+      recordingRef.current = recording;
+      setIsListening(true);
+    } catch (err) {
+      console.error('Failed to start recording:', err);
       setIsListening(false);
     }
   };
 
-  const clearTranscript = () => {
-    setTranscript('');
+  const stopListening = async () => {
+    if (!recordingRef.current || !isListening) return;
+
+    try {
+      setIsListening(false);
+      setIsTranscribing(true);
+
+      const recording = recordingRef.current;
+      recordingRef.current = null;
+
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+      });
+
+      const uri = recording.getURI();
+      if (!uri) {
+        setIsTranscribing(false);
+        return;
+      }
+
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'audio.m4a';
+
+      // @ts-ignore React Native FormData payload
+      formData.append('file', {
+        uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+        name: filename,
+        type: 'audio/m4a',
+      });
+
+      const session = useAuthStore.getState().session;
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/transcribe`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server status ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.success && data.text && onResult) {
+        onResult(data.text);
+      }
+    } catch (err) {
+      console.error('Speech transcription error:', err);
+    } finally {
+      setIsTranscribing(false);
+    }
   };
 
   return {
     isListening,
-    transcript,
+    isTranscribing,
     startListening,
     stopListening,
-    clearTranscript,
-    isSupported: !!recognitionRef.current || Platform.OS !== 'web'
   };
 }
