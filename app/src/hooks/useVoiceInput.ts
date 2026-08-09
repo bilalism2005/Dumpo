@@ -15,6 +15,7 @@ export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputR
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingStartTimeRef = useRef<number>(0);
 
   useEffect(() => {
     return () => {
@@ -47,6 +48,7 @@ export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputR
       await recording.startAsync();
 
       recordingRef.current = recording;
+      recordingStartTimeRef.current = Date.now();
       setIsListening(true);
     } catch (err) {
       console.error('Failed to start recording:', err);
@@ -63,11 +65,19 @@ export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputR
 
       const recording = recordingRef.current;
       recordingRef.current = null;
+      
+      const duration = Date.now() - recordingStartTimeRef.current;
 
       await recording.stopAndUnloadAsync();
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
       });
+
+      // Avoid hallucinations from Whisper for < 1000ms silent audio bumps
+      if (duration < 1000) {
+        setIsTranscribing(false);
+        return;
+      }
 
       const uri = recording.getURI();
       if (!uri) {
@@ -80,7 +90,7 @@ export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputR
 
       // @ts-ignore React Native FormData payload
       formData.append('file', {
-        uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+        uri: Platform.OS === 'android' ? uri : uri.startsWith('file://') ? uri : `file://${uri}`,
         name: filename,
         type: 'audio/m4a',
       });

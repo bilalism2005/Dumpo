@@ -32,6 +32,13 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      "expo-notifications",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Dumpo to access your microphone to record voice notes."
+        }
       ]
     ],
     "experiments": {

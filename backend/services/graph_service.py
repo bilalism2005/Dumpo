@@ -19,6 +19,7 @@ class AgentState(TypedDict):
     user_id: str
     message_id: str
     current_time_context: Optional[str]
+    chat_history: List[Dict[str, Any]]
 
     # Router Outputs
     dump_type: str
@@ -231,11 +232,28 @@ async def router_node(state: AgentState) -> AgentState:
     if stored_memories and stored_memories.value:
         memory_context = json.dumps(stored_memories.value, ensure_ascii=False)
 
+    # Fetch recent conversation history (last 10 turns) to give Router context
+    recent_history = []
+    try:
+        loop = asyncio.get_running_loop()
+        history_res = await loop.run_in_executor(None, lambda:
+            supabase.table("chat_messages")
+                .select("role, content")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(10).execute()
+        )
+        if history_res.data:
+            recent_history = list(reversed(history_res.data))
+    except Exception as e:
+        logger.error(f"Failed to fetch chat history for router_node: {e}")
+
     router_output = await router_node_llm(
         text=state["raw_input"],
         user_id=user_id,
         memory_context=memory_context,
-        current_time_context=state["current_time_context"]
+        current_time_context=state["current_time_context"],
+        chat_history=recent_history
     )
 
     return {
@@ -483,20 +501,9 @@ async def chatbot_node(state: AgentState) -> AgentState:
     user_id = state["user_id"]
     loop = asyncio.get_running_loop()
 
-    # Fetch recent conversation history from chat_messages table (last 10 turns)
-    recent_history = []
-    try:
-        history_res = await loop.run_in_executor(None, lambda:
-            supabase.table("chat_messages")
-                .select("role, content")
-                .eq("user_id", user_id)
-                .order("created_at", desc=True)
-                .limit(10).execute()
-        )
-        if history_res.data:
-            recent_history = list(reversed(history_res.data))
-    except Exception as e:
-        logger.error(f"Failed to fetch chat history for chatbot_node: {e}")
+    # Reuse chat history fetched by router
+    recent_history = state.get("chat_history", [])
+    # (Removed redundant fetch since router now provides chat_history)
 
     chat_responses = []
     for item in state.get("atomic_items", []):
@@ -596,6 +603,7 @@ async def process_user_dump_graph(
         "user_id": user_id,
         "message_id": message_id,
         "current_time_context": current_time_context,
+        "chat_history": [],
         "dump_type": "",
         "journal_segment": None,
         "atomic_items": [],

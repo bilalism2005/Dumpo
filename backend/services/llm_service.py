@@ -21,16 +21,16 @@ OUTPUT: Return only a valid JSON object. No markdown formatting (like ```json), 
 FORMAT: 
 { 
   "dump_type": "narrative" | "atomic" | "mixed",
-  "journal_segment": "string or null",
+  "journal_segment": "<extracted narrative string> or null",
   "atomic_items": [ 
     { 
       "action_type": "CREATE" | "CRUD" | "CHAT",
-      "primary_bucket": "string or null",
-      "formatted_text": "string", 
-      "extracted": "object or null",
-      "resolved_id": "string or null",
-      "operation": "string or null",
-      "update_fields": "object or null"
+      "primary_bucket": "<bucket_name> or null",
+      "formatted_text": "<string>", 
+      "extracted": { <key_value_pairs> or null },
+      "resolved_id": "<string_uuid> or null",
+      "operation": "<string> or null",
+      "update_fields": { <key_value_pairs> or null }
     } 
   ] 
 }
@@ -49,17 +49,20 @@ STEP 4 — SPLIT & ROUTE ATOMIC ITEMS:
 For each item, determine its `action_type`:
 
 - CRUD: Use this when the user is reading, updating, or deleting something that ALREADY EXISTS in their data.
-  - READING their own data: "What are my pending tasks?", "Show my tasks", "Did I log anything about gym?", "What do I owe Aryan?" → CRUD READ
+  - READING their own data: "What are my pending tasks?", "Show my tasks" → CRUD READ
   - UPDATING: "Mark meeting with John as done", "I watched Interstellar", "Aryan paid me back" → CRUD UPDATE
   - DELETING: "Cancel my meeting", "Remove the gym task" → CRUD DELETE
   - APPENDING to journal: "Also add that I had pizza" → CRUD APPEND
   USE THE MEMORY CONTEXT to find resolved_id. Set operation to UPDATE/DELETE/APPEND/READ.
 
-- CHAT: ONLY for general knowledge questions with NO connection to the user's stored data.
-  Examples of CHAT: "What is the capital of France?", "Should I work out today?", "Tell me a joke."
-  Examples NOT chat (they are CRUD): "What are my tasks?", "Do I owe anyone money?", "What movies did I add?"
+- CHAT: ONLY for general knowledge questions with NO connection to the user's stored data, OR when answering a direct question from the Chat Context (e.g. "Yes").
+  Examples of CHAT: "What is the capital of France?", "Should I work out today?"
+  Examples NOT chat (they are CRUD): "What are my tasks?"
 
 - CREATE: Adding a brand new item that does NOT exist in memory context.
+  IMPORTANT TASK RULES:
+  - Any statement about meetings, appointments, or schedules (e.g., "Meeting with Nafis at 1:03 AM") is a CREATE in `tasks`.
+  - Commands to set a reminder (e.g., "Remind me to check alerts") are CREATE in `tasks` with `reminder_required: true`. Do NOT classify these as CRUD READ!
 
 For CRUD items, populate:
 - "resolved_id": exact "id" from Memory Context for the matching item, or null.
@@ -68,26 +71,25 @@ For CRUD items, populate:
   - For tasks completion: MUST use `{ "is_complete": true }` (or false to uncomplete).
   - For watchlist: MUST use `{ "is_watched": true }`.
   - For finance: MUST use `{ "is_settled": true }`.
-  - Do NOT use invalid field names like "status", "done", "completed". Use the exact boolean fields above.
+  - Do NOT use invalid field names like "status", "done".
 
 STEP 5 — CLASSIFY bucket (CREATE & CRUD only):
 Classify into: tasks | ideas | journals | finance | health | watchlist | others.
 
-WATCHLIST & OTHERS RULES:
-- Classify into `watchlist` ONLY if there is clear media intent (e.g. "watch Dilwale", "movie Phir Hera Pheri") or high confidence it is a known movie/show/anime title (e.g. "Houseful 4", "Inception").
-- "I watched Dilwale" → CRUD, watchlist, operation: UPDATE, update_fields: { "is_watched": true }, resolved_id from memory.
-- UNCERTAINTY RULE: If you are NOT SURE whether a word/phrase is a movie/show or if it lacks clear bucket signals (confidence < 0.6), you MUST classify it into `others`. Do NOT default ambiguous proper nouns to watchlist.
+WATCHLIST RULES & CONTEXT:
+- Classify into `watchlist` ONLY if there is clear media intent OR if the Chat Context shows you just asked the user if they wanted to add it to their watchlist and they replied affirmatively.
+- UNCERTAINTY RULE: If you are NOT SURE whether a word/phrase is a movie/show, classify it into `others`.
 """
 
 
 SCHEMA_REFERENCE = """EXTRACTION SCHEMAS (populate these fields directly in the "extracted" object):
-- tasks: { "title": "string", "due_date": "YYYY-MM-DD" or null, "due_time": "HH:MM" or null, "reminder_required": boolean }
-- ideas: { "title": "string", "description": "a 1-2 sentence expansion of the idea or null" }
-- journals: { "journal_date": "YYYY-MM-DD", "title": "string", "content": "string", "mood_signal": "positive"|"negative"|"neutral" }
-- finance: { "description": "string", "amount": number, "currency": "INR"|"USD"|..., "category": "food"|"groceries"|"transport"|"shopping"|"entertainment"|"health"|"pay"|"receive"|"others", "is_settled": boolean }
-- health: { "title": "string", "description": "string", "health_type": "physical"|"mental"|"medical"|"nutrition" }
-- watchlist: { "title": "string", "genre": "action"|"thriller"|"comedy"|"horror"|"romance"|"others", "content_type": "movie"|"show"|"documentary"|"anime"|null, "platform": "string"|null, "year_of_launch": "string"|null, "language": "string"|null, "is_watched": boolean }
-- others: { "raw_text": "string" }
+- tasks: { "title": "<task_title>", "due_date": "YYYY-MM-DD" or null, "due_time": "HH:MM" or null, "reminder_required": <boolean> }
+- ideas: { "title": "<idea_title>", "description": "<description> or null" }
+- journals: { "journal_date": "YYYY-MM-DD", "title": "<title>", "content": "<content>", "mood_signal": "positive"|"negative"|"neutral" }
+- finance: { "description": "<desc>", "amount": <number>, "currency": "INR"|"USD"|..., "category": "food"|"groceries"|"others", "is_settled": <boolean> }
+- health: { "title": "<title>", "description": "<desc>", "health_type": "physical"|"mental"|"medical"|"nutrition" }
+- watchlist: { "title": "<movie_or_show_title>", "genre": "action"|"thriller"|"others", "content_type": "movie"|"show"|null, "platform": "<platform>"|null, "year_of_launch": "<year>"|null, "language": "<lang>"|null, "is_watched": <boolean> }
+- others: { "raw_text": "<text>" }
 """
 
 def clean_response_text(text: str) -> str:
@@ -190,7 +192,7 @@ def validate_extracted_fields(bucket: str, extracted: Dict[str, Any], formatted_
 
     return extracted
 
-async def router_node_llm(text: str, user_id: str, memory_context: str = "", current_time_context: Optional[str] = None) -> Dict[str, Any]:
+async def router_node_llm(text: str, user_id: str, memory_context: str = "", current_time_context: Optional[str] = None, chat_history: List[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Call Groq API using Llama 3.1 8B to format, split, classify, route, and extract structured data from dump text.
     """
@@ -210,6 +212,16 @@ async def router_node_llm(text: str, user_id: str, memory_context: str = "", cur
     if len(text) > 1500:
         text = text[:1500] + " [truncated due to length]"
 
+    # Format chat history for context
+    chat_context = ""
+    if chat_history:
+        formatted_msgs = []
+        for msg in chat_history:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            formatted_msgs.append(f"{role.capitalize()}: {content}")
+        chat_context = "\n".join(formatted_msgs)
+        
     # Fallback to local Indian Standard Time (IST, UTC+5:30) to avoid timezone offsets causing date mismatches
     if not current_time_context:
         ist_tz = timezone(timedelta(hours=5, minutes=30))
@@ -221,7 +233,7 @@ async def router_node_llm(text: str, user_id: str, memory_context: str = "", cur
     except Exception:
         default_date = datetime.now(timezone(timedelta(hours=5, minutes=30))).date().isoformat()
 
-    user_prompt = f"{SCHEMA_REFERENCE}\nCurrent Time Context: {current_time_context}\nMemory Context:\n{memory_context}\n\nRaw Thought: {text}"
+    user_prompt = f"{SCHEMA_REFERENCE}\nCurrent Time Context: {current_time_context}\nChat Context:\n{chat_context}\n\nMemory Context:\n{memory_context}\n\nRaw Thought: {text}"
     
     max_retries = 2
     for attempt in range(max_retries):
