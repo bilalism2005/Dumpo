@@ -64,7 +64,11 @@ For each item, determine its `action_type`:
 For CRUD items, populate:
 - "resolved_id": exact "id" from Memory Context for the matching item, or null.
 - "operation": "UPDATE" | "DELETE" | "APPEND" | "READ"
-- "update_fields": object with only specific fields to change for UPDATE, null otherwise.
+- "update_fields": object with only valid table columns to change for UPDATE, null otherwise:
+  - For tasks completion: MUST use `{ "is_complete": true }` (or false to uncomplete).
+  - For watchlist: MUST use `{ "is_watched": true }`.
+  - For finance: MUST use `{ "is_settled": true }`.
+  - Do NOT use invalid field names like "status", "done", "completed". Use the exact boolean fields above.
 
 STEP 5 — CLASSIFY bucket (CREATE & CRUD only):
 Classify into: tasks | ideas | journals | finance | health | watchlist | others.

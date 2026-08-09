@@ -118,11 +118,72 @@ def sync_user_memory(user_id: str, today: str):
         logger.error(f"Error syncing user memory: {e}")
 
 
+def normalize_update_fields(bucket: str, update_fields: Dict[str, Any]) -> Dict[str, Any]:
+    """Safely map LLM alias keys (e.g. status='done', is_done=True) to exact Supabase table column names."""
+    if not isinstance(update_fields, dict):
+        return {}
+    
+    normalized = {}
+    
+    if bucket == "tasks":
+        for key, val in list(update_fields.items()):
+            key_lower = str(key).lower()
+            if key_lower in ["is_complete", "is_done", "done", "completed", "status", "complete"]:
+                if val in [True, "done", "complete", "completed", "true", 1]:
+                    normalized["is_complete"] = True
+                    normalized["completed_at"] = datetime.now(timezone.utc).isoformat()
+                elif val in [False, "pending", "incomplete", "false", 0]:
+                    normalized["is_complete"] = False
+                    normalized["completed_at"] = None
+            elif key_lower in ["title", "due_date", "due_time", "reminder_set"]:
+                normalized[key_lower] = val
+
+    elif bucket == "watchlist":
+        for key, val in list(update_fields.items()):
+            key_lower = str(key).lower()
+            if key_lower in ["is_watched", "watched", "status"]:
+                if val in [True, "watched", "true", 1]:
+                    normalized["is_watched"] = True
+                    normalized["watched_at"] = datetime.now(timezone.utc).isoformat()
+                elif val in [False, "unwatched", "false", 0]:
+                    normalized["is_watched"] = False
+                    normalized["watched_at"] = None
+            elif key_lower in ["title", "genre", "content_type", "platform", "language", "year_of_launch"]:
+                normalized[key_lower] = val
+
+    elif bucket == "finance":
+        for key, val in list(update_fields.items()):
+            key_lower = str(key).lower()
+            if key_lower in ["is_settled", "settled", "status"]:
+                if val in [True, "settled", "paid", "true", 1]:
+                    normalized["is_settled"] = True
+                    normalized["settled_at"] = datetime.now(timezone.utc).isoformat()
+                elif val in [False, "unsettled", "pending", "false", 0]:
+                    normalized["is_settled"] = False
+                    normalized["settled_at"] = None
+            elif key_lower in ["description", "amount", "currency", "category"]:
+                normalized[key_lower] = val
+
+    elif bucket == "ideas":
+        for key, val in list(update_fields.items()):
+            key_lower = str(key).lower()
+            if key_lower in ["title", "description"]:
+                normalized[key_lower] = val
+
+    elif bucket == "health":
+        for key, val in list(update_fields.items()):
+            key_lower = str(key).lower()
+            if key_lower in ["title", "description", "health_type"]:
+                normalized[key_lower] = val
+
+    return normalized if normalized else update_fields
+
+
 # ─── Fuzzy Search Fallback ────────────────────────────────────────────────────
 def fuzzy_search_bucket(user_id: str, bucket: str, query: str, limit: int = 5) -> List[Dict[str, Any]]:
     """
     ILIKE fallback search when resolved_id is null.
-    For full pg_trgm support, the pg_trgm extension must be enabled in Supabase.
+    Strips action stop words ("mark", "done", "delete") to find the true item title.
     """
     table = BUCKET_TABLE_MAP.get(bucket)
     if not table:
@@ -130,8 +191,9 @@ def fuzzy_search_bucket(user_id: str, bucket: str, query: str, limit: int = 5) -
 
     title_col = "description" if bucket == "finance" else "title"
     try:
-        # Use the most meaningful word from the query for ilike matching
-        keyword = query.strip().split()[-1] if query.strip() else query
+        stop_words = {"mark", "as", "done", "complete", "completed", "delete", "remove", "cancel", "update", "change", "the", "my", "to", "task", "idea", "item"}
+        words = [w for w in query.strip().split() if w.lower() not in stop_words]
+        keyword = words[0] if words else (query.strip().split()[-1] if query.strip() else query)
         res = supabase.table(table)\
             .select(f"id, {title_col}")\
             .eq("user_id", user_id)\
@@ -274,6 +336,7 @@ async def _execute_crud(
             }
 
         elif operation == "UPDATE":
+            update_fields = normalize_update_fields(bucket, update_fields)
             if not update_fields:
                 return {
                     "primary_bucket": bucket, "bucket_tags": [_bucket_tag(bucket)],
