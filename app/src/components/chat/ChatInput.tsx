@@ -48,12 +48,12 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
       <TextInput
         value={inputText}
         onChangeText={setInputText}
-        placeholder={isListening ? "Listening to your thoughts..." : "What's on your mind?"}
+        placeholder={isListening ? "Listening to your thoughts..." : (disabled ? "Processing..." : "What's on your mind?")}
         placeholderTextColor="rgba(255, 255, 255, 0.4)"
-        style={styles.textInput}
+        style={[styles.textInput, disabled && styles.textInputDisabled]}
         multiline={true}
         maxHeight={100}
-        disabled={disabled}
+        editable={!disabled}
       />
       
       {/* 3. Send Button (Right) */}
@@ -112,6 +112,10 @@ const styles = StyleSheet.create({
     fontFamily: 'System',
     marginRight: 8,
     textAlignVertical: 'center',
+  },
+  textInputDisabled: {
+    opacity: 0.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.01)',
   },
   sendButton: {
     height: 48,

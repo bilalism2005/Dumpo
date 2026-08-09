@@ -15,59 +15,47 @@ client = Groq(api_key=settings.GROQ_API_KEY)
 # Define the Groq model
 MODEL_NAME = "llama-3.1-8b-instant"
 
-SYSTEM_PROMPT = """You are Dumpo's classification engine. Your task is to process the user's raw thought dumps.
+ROUTER_SYSTEM_PROMPT = """You are Dumpo's Router and Classification engine. Your task is to process the user's raw thought dumps, fix grammar, split them, classify their type, and route them.
 
-OUTPUT: Return only a valid JSON object. No markdown formatting (like ```json), no chat prose, and no explanations.
-FORMAT: { "items": [ { "primary_bucket": string, "secondary_buckets": string[], "confidence": float, "formatted_text": string, "extracted": object } ] }
+OUTPUT: Return only a valid JSON object. No markdown formatting (like ```json), no chat prose.
+FORMAT: 
+{ 
+  "dump_type": "narrative" | "atomic" | "mixed",
+  "journal_segment": "string or null",
+  "atomic_items": [ 
+    { 
+      "action_type": "CREATE" | "CRUD" | "CHAT",
+      "primary_bucket": "string or null",
+      "formatted_text": "string", 
+      "extracted": "object or null"
+    } 
+  ] 
+}
 
-STEP 1 — FORMAT: Fix typos and correct grammar. Do not change the core meaning. Do not add external facts or details. Output must always be formatted in English.
+STEP 1 — FORMAT: Fix typos and correct grammar. Translate Hinglish to English. Do not add external facts.
 
-STEP 2 — SPLIT: If the formatted raw thought contains multiple independent items or thoughts (for example, a finance transaction AND a task, or a journal entry AND a task), you MUST split them and return them as separate objects in the "items" array. Never combine independent actions/thoughts into a single item.
+STEP 2 — DUMP TYPE:
+- narrative: A continuous story or journal entry (e.g., "Today was great, I went to the park.").
+- atomic: One or more specific actions/tasks/ideas (e.g., "Remind me to call John.", "I owe Alice 10.", "What if we build an AI app?").
+- mixed: A combination of both (e.g., "Today was tiring. Also remind me to pay rent.").
 
-STEP 3 — CLASSIFY: Classify each split item into a primary_bucket using this decision table:
+STEP 3 — JOURNAL SEGMENT: If dump_type is narrative or mixed, extract the continuous story part into `journal_segment`. Otherwise null.
 
-| Bucket    | Classify here when...                      | Key signals                          |
-|-----------|---------------------------------------------|--------------------------------------|
-| tasks     | User needs to DO something                  | need to, call, send, buy, by [date]  |
-| ideas     | Exploratory thought, no action needed       | what if, maybe, concept, app idea    |
-| journals  | Feeling or personal reflection              | felt, exhausted, today was, realised |
-| finance   | Money involved (debts, expenses, income)    | spent, owe, paid, rupees, amount     |
-| health    | Physical/mental wellness, symptoms, workouts| gym, slept, sick, headache, workout  |
-| watchlist | Media to watch/read or already watched      | watch, movie, show, netflix, anime   |
-| others    | Does not clearly fit above (confidence<0.6) | fallback                             |
+STEP 4 — SPLIT & ROUTE ATOMIC ITEMS: If dump_type is atomic or mixed, split the atomic parts into distinct items in the "atomic_items" array.
+For each item, determine its `action_type`:
+- CREATE: Adding a new item to a bucket (new task, idea, finance entry, movie to watch, etc.).
+- CRUD: Reading, Updating, or Deleting an EXISTING item (e.g., "Cancel my meeting with John", "I watched Interstellar", "Did I pay Alice?"). USE THE PROVIDED MEMORY CONTEXT to determine if an entity already exists!
+- CHAT: General conversational questions not related to user's data (e.g., "Should I work on my body?", "What's the capital of France?").
 
-STEP 4 — EXTRACT: Populate the exact fields defined in the schema for that item's primary_bucket. The fields must be at the root of the "extracted" object. Do NOT nest them inside a key with the bucket name.
+STEP 5 — CLASSIFY (CREATE & CRUD only):
+Classify into primary_bucket: tasks | ideas | journals (rare for atomic) | finance | health | watchlist | others.
+- Note on Watchlist: Any mention of a recognizable movie, TV show, anime, or documentary (e.g., "Houseful 4", "Inception", "Naruto") MUST be classified into the `watchlist` bucket, even if the word 'watch' is not explicitly used.
 
-STEP 5 — CROSS-BUCKET: If the item strongly applies to a second bucket as well, add it to secondary_buckets (excluding the primary).
-
-BOUNDARY RULES:
-- "Should probably go to gym" -> ideas (exploratory). "Go to gym tomorrow 7am" -> tasks (action + time commitment).
-- "Aryan owes me 500" -> finance/receive. "I owe Aryan 500" -> finance/pay.
-- "Lent Priya 200" -> finance/receive. "Borrowed 300 from Rohan" -> finance/pay.
-- "Felt tired today" -> journals. "Need to fix my sleep schedule" -> tasks.
-- "Peaky Blinders is amazing" -> others (no watch intent). "Watch Peaky Blinders" -> watchlist.
-- Negation: "Meeting NOT on Monday" is not a task for Monday.
-- Past tense: "Reviewed what happened last Tuesday" is not a future task.
-- Hinglish: Classify based on meaning, not language.
-
-GENRE MAPPING RULES:
-You must select only one of these genres for watchlist: "action"|"thriller"|"comedy"|"horror"|"romance"|"others".
-- "Watch Peaky Blinders" -> genre: thriller
-- "Watch Interstellar" -> genre: others (since sci-fi is not in the allowed list)
-- "Watch Friends" -> genre: comedy
-- "Watch Conjuring" -> genre: horror
-- "Watch Titanic" -> genre: romance
-
-FINANCE DIRECTION RULES:
-- pay = money leaving user's pocket (user owes someone). You MUST set category to "pay". Signals: "I owe", "need to pay", "gave loan to", "borrowed from".
-- receive = money coming to user (someone owes user). You MUST set category to "receive". Signals: "owes me", "lent to", "gave money to [person]", "borrowed by".
-
-CONFIDENCE: If genuinely ambiguous, set confidence below 0.6 to auto-route to others.
+STEP 6 — EXTRACT (CREATE only): Populate the exact fields defined in the schema for that item's primary_bucket inside "extracted".
 """
 
 SCHEMA_REFERENCE = """EXTRACTION SCHEMAS (populate these fields directly in the "extracted" object):
 - tasks: { "title": "string", "due_date": "YYYY-MM-DD" or null, "due_time": "HH:MM" or null, "reminder_required": boolean }
-  * Note: If due_date or due_time is detected, reminder_required must be true (default time is "09:00" if date exists but no time).
 - ideas: { "title": "string", "description": "a 1-2 sentence expansion of the idea or null" }
 - journals: { "journal_date": "YYYY-MM-DD", "title": "string", "content": "string", "mood_signal": "positive"|"negative"|"neutral" }
 - finance: { "description": "string", "amount": number, "currency": "INR"|"USD"|..., "category": "food"|"groceries"|"transport"|"shopping"|"entertainment"|"health"|"pay"|"receive"|"others", "is_settled": boolean }
@@ -176,20 +164,21 @@ def validate_extracted_fields(bucket: str, extracted: Dict[str, Any], formatted_
 
     return extracted
 
-async def classify_dump(text: str, user_id: str, current_time_context: Optional[str] = None) -> List[Dict[str, Any]]:
+async def router_node_llm(text: str, user_id: str, memory_context: str = "", current_time_context: Optional[str] = None) -> Dict[str, Any]:
     """
-    Call Groq API using Llama 3.1 8B to format, split, classify and extract structured data from dump text.
+    Call Groq API using Llama 3.1 8B to format, split, classify, route, and extract structured data from dump text.
     """
     if not text or not text.strip():
-        return [{
-            "primary_bucket": "others",
-            "secondary_buckets": [],
-            "confidence": 0.5,
-            "formatted_text": "",
-            "extracted": {
-                "raw_text": ""
-            }
-        }]
+        return {
+            "dump_type": "atomic",
+            "journal_segment": None,
+            "atomic_items": [{
+                "action_type": "CHAT",
+                "primary_bucket": "others",
+                "formatted_text": "",
+                "extracted": {"raw_text": ""}
+            }]
+        }
 
     # Input length guard
     if len(text) > 1500:
@@ -206,22 +195,18 @@ async def classify_dump(text: str, user_id: str, current_time_context: Optional[
     except Exception:
         default_date = datetime.now(timezone(timedelta(hours=5, minutes=30))).date().isoformat()
 
-    user_prompt = f"{SCHEMA_REFERENCE}\nCurrent Time Context: {current_time_context}\nRaw Thought: {text}"
+    user_prompt = f"{SCHEMA_REFERENCE}\nCurrent Time Context: {current_time_context}\nMemory Context:\n{memory_context}\n\nRaw Thought: {text}"
     
     max_retries = 2
     for attempt in range(max_retries):
         try:
-            # Groq client's create call is synchronous under sync client, but we call it asynchronously inside
-            # loop or run it in executor if needed. Since it's a network request, making the wrapper async and
-            # using await asyncio.sleep preserves non-blocking retry wait, which is the main event-loop hog.
-            # To be truly non-blocking during network I/O, we can run Groq client inside an asyncio thread executor.
             loop = asyncio.get_running_loop()
             completion = await loop.run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt}
                     ],
                     temperature=0.1,
@@ -233,28 +218,29 @@ async def classify_dump(text: str, user_id: str, current_time_context: Optional[
             cleaned_text = clean_response_text(response_text)
             data = json.loads(cleaned_text)
             
-            items = data.get("items", [])
-            
-            # Enforce schema validation and defaults
+            # Enforce schema validation and defaults on atomic_items
+            items = data.get("atomic_items", [])
             for item in items:
                 primary = item.get("primary_bucket", "others")
+                if not primary:
+                     primary = "others"
                 formatted_text = item.get("formatted_text", text)
-                confidence = item.get("confidence", 1.0)
                 
-                # Confidence check fallback
-                if confidence < 0.6:
-                    item["primary_bucket"] = "others"
-                    item["secondary_buckets"] = []
-                    item["extracted"] = {"raw_text": formatted_text}
-                else:
+                # Only validate extracted fields if action_type is CREATE
+                if item.get("action_type") == "CREATE":
                     item["extracted"] = validate_extracted_fields(
                         primary,
-                        item.get("extracted", {}),
+                        item.get("extracted") or {},
                         formatted_text,
                         default_date
                     )
+                elif item.get("action_type") == "CRUD":
+                    if not item.get("extracted"):
+                         item["extracted"] = {}
+                else:
+                    item["extracted"] = {"raw_text": formatted_text}
             
-            # Deduplication check before returning items
+            # Deduplication check for atomic_items
             seen_texts = set()
             deduped_items = []
             for item in items:
@@ -263,7 +249,8 @@ async def classify_dump(text: str, user_id: str, current_time_context: Optional[
                     seen_texts.add(fmt_text)
                     deduped_items.append(item)
                     
-            return deduped_items
+            data["atomic_items"] = deduped_items
+            return data
             
         except Exception as e:
             if attempt == max_retries - 1:
@@ -272,16 +259,17 @@ async def classify_dump(text: str, user_id: str, current_time_context: Optional[
             else:
                 await asyncio.sleep(1.0)
                 
-    # Direct fallback return statement to guarantee List return
-    return [{
-        "primary_bucket": "others",
-        "secondary_buckets": [],
-        "confidence": 0.5,
-        "formatted_text": text,
-        "extracted": {
-            "raw_text": text
-        }
-    }]
+    # Direct fallback return statement
+    return {
+        "dump_type": "atomic",
+        "journal_segment": None,
+        "atomic_items": [{
+            "action_type": "CREATE",
+            "primary_bucket": "others",
+            "formatted_text": text,
+            "extracted": {"raw_text": text}
+        }]
+    }
 
 async def merge_journals_narrative(old_content: str, new_content: str, journal_date: Optional[str] = None) -> str:
     """

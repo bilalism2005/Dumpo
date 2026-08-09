@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from backend.models.schemas import ProcessRequest, ProcessResponse
 from backend.routers.auth import get_current_user_id
-from backend.services.classification_service import process_user_dump
+from backend.services.graph_service import process_user_dump_graph
 from backend.services.supabase_service import get_supabase_client
 
 router = APIRouter(prefix="/api/v1", tags=["chat"])
@@ -13,7 +13,7 @@ async def process_dump(
     user_id: str = Depends(get_current_user_id)
 ):
     """
-    Process a new raw thought dump.
+    Process a new raw thought dump using LangGraph.
     """
     if not payload.text.strip():
         raise HTTPException(
@@ -22,7 +22,7 @@ async def process_dump(
         )
         
     try:
-        response_data = await process_user_dump(
+        response_data = await process_user_dump_graph(
             user_id=user_id,
             message_id=payload.message_id,
             text=payload.text,
