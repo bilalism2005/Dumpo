@@ -258,10 +258,13 @@ async def _execute_crud(
 ) -> Dict:
     """Execute the actual DB operation for a fully resolved CRUD item."""
     table = BUCKET_TABLE_MAP.get(bucket, bucket)
+    loop = asyncio.get_running_loop()
     try:
         if operation == "DELETE":
-            supabase.table(table).delete()\
-                .eq("id", record_id).eq("user_id", user_id).execute()
+            await loop.run_in_executor(None, lambda:
+                supabase.table(table).delete()
+                    .eq("id", record_id).eq("user_id", user_id).execute()
+            )
             memory_store.delete(("memories", user_id), "user_data")
             return {
                 "id": record_id, "primary_bucket": bucket,
@@ -277,23 +280,29 @@ async def _execute_crud(
                     "confirmation_text": f"Got it, but I wasn't sure what to change for \"{text}\". Can you be more specific?",
                     "extracted": {}, "reminder_set": False, "reminder_text": None
                 }
-            supabase.table(table).update(update_fields)\
-                .eq("id", record_id).eq("user_id", user_id).execute()
+            await loop.run_in_executor(None, lambda:
+                supabase.table(table).update(update_fields)
+                    .eq("id", record_id).eq("user_id", user_id).execute()
+            )
             memory_store.delete(("memories", user_id), "user_data")
             return {
                 "id": record_id, "primary_bucket": bucket,
                 "bucket_tags": [_bucket_tag(bucket)],
-                "confirmation_text": f"Updated in your {bucket}.",
+                "confirmation_text": f"Updated in your {bucket}. ✓",
                 "extracted": update_fields, "reminder_set": False, "reminder_text": None
             }
 
         elif operation == "APPEND":
-            existing = supabase.table(table).select("content")\
-                .eq("id", record_id).limit(1).execute()
+            existing = await loop.run_in_executor(None, lambda:
+                supabase.table(table).select("content")
+                    .eq("id", record_id).limit(1).execute()
+            )
             old_content = existing.data[0].get("content", "") if existing.data else ""
             merged = await merge_journals_narrative(old_content, text)
-            supabase.table(table).update({"content": merged})\
-                .eq("id", record_id).eq("user_id", user_id).execute()
+            await loop.run_in_executor(None, lambda:
+                supabase.table(table).update({"content": merged})
+                    .eq("id", record_id).eq("user_id", user_id).execute()
+            )
             memory_store.delete(("memories", user_id), "user_data")
             return {
                 "id": record_id, "primary_bucket": "journals",
@@ -303,7 +312,10 @@ async def _execute_crud(
             }
 
         elif operation == "READ":
-            res = supabase.table(table).select("*").eq("id", record_id).limit(1).execute()
+            res = await loop.run_in_executor(None, lambda:
+                supabase.table(table).select("*")
+                    .eq("id", record_id).limit(1).execute()
+            )
             data = res.data[0] if res.data else {}
             title_col = "description" if bucket == "finance" else "title"
             readable = data.get(title_col) or data.get("content") or str(data)
@@ -315,7 +327,7 @@ async def _execute_crud(
             }
 
     except Exception as e:
-        logger.error(f"CRUD execute failed for {bucket}/{record_id}: {e}")
+        logger.error(f"CRUD execute failed for {bucket}/{record_id}: {e}", exc_info=True)
 
     return {
         "primary_bucket": bucket, "bucket_tags": [_bucket_tag(bucket)],
@@ -338,13 +350,41 @@ async def crud_node(state: AgentState) -> AgentState:
         update_fields = item.get("update_fields") or {}
         text          = item.get("formatted_text", "")
 
-        # Fast path: LLM already resolved the ID from memory
+        # ── READ with no specific ID: return formatted list from memory ────────
+        if operation == "READ" and not resolved_id:
+            stored = memory_store.get(("memories", user_id), "user_data")
+            mem = stored.value if stored and stored.value else {}
+            bucket_data = mem.get(bucket, [])
+            if not bucket_data:
+                crud_responses.append({
+                    "primary_bucket": bucket, "bucket_tags": [_bucket_tag(bucket)],
+                    "confirmation_text": f"You have no items in {bucket} right now.",
+                    "extracted": {}, "reminder_set": False, "reminder_text": None
+                })
+            else:
+                title_col = "description" if bucket == "finance" else "title"
+                lines = []
+                for i, entry in enumerate(bucket_data, 1):
+                    label = entry.get(title_col) or entry.get("title", "Untitled")
+                    if bucket == "tasks" and entry.get("due_date"):
+                        label += f" (due {entry['due_date']})"
+                    elif bucket == "finance":
+                        label += f" — {entry.get('currency','INR')} {entry.get('amount','')}"
+                    lines.append(f"{i}. {label}")
+                crud_responses.append({
+                    "primary_bucket": bucket, "bucket_tags": [_bucket_tag(bucket)],
+                    "confirmation_text": f"Here are your {bucket}:\n" + "\n".join(lines),
+                    "extracted": {}, "reminder_set": False, "reminder_text": None
+                })
+            continue
+
+        # ── Fast path: LLM already resolved the ID from memory ────────────────
         if resolved_id:
             result = await _execute_crud(user_id, bucket, operation, resolved_id, update_fields, text)
             crud_responses.append(result)
             continue
 
-        # Fallback: ILIKE fuzzy search
+        # ── Fallback: ILIKE fuzzy search ──────────────────────────────────────
         candidates = fuzzy_search_bucket(user_id, bucket, text)
 
         if len(candidates) == 0:
@@ -368,6 +408,7 @@ async def crud_node(state: AgentState) -> AgentState:
             })
 
     return {"items": crud_responses, "success": True}
+
 
 
 async def chatbot_node(state: AgentState) -> AgentState:

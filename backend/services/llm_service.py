@@ -43,30 +43,42 @@ STEP 2 — DUMP TYPE:
 - mixed: A combination of both (e.g., "Today was tiring. Also remind me to pay rent.").
 
 STEP 3 — JOURNAL SEGMENT: If dump_type is narrative or mixed, extract the continuous story part into `journal_segment`. Otherwise null.
-- IMPORTANT: If the Memory Context contains a journal for today's date, set journal_segment to the narrative text as usual — the system will handle merging automatically.
+- If the Memory Context contains a journal for today's date, set journal_segment to the narrative text — the system handles merging.
 
-STEP 4 — SPLIT & ROUTE ATOMIC ITEMS: If dump_type is atomic or mixed, split the atomic parts into distinct items in the "atomic_items" array.
+STEP 4 — SPLIT & ROUTE ATOMIC ITEMS:
 For each item, determine its `action_type`:
-- CREATE: Adding a brand new item (no match in memory context).
-- CRUD: Operating on an EXISTING item. USE THE MEMORY CONTEXT to determine if an entity exists.
-- CHAT: General conversational question unrelated to user's stored data.
 
-For CRUD items, you MUST populate these extra fields:
-- "resolved_id": the exact "id" value of the matching item from Memory Context, or null if not confidently found.
-- "operation": one of "UPDATE" | "DELETE" | "APPEND" | "READ"
-  - UPDATE: Modify a field (e.g., "Change meeting with John to 5pm", "Mark Aryan's debt as settled")
-  - DELETE: Remove an item (e.g., "Cancel my meeting with John", "Delete the gym task")
-  - APPEND: Add content to existing item, only for journals (e.g., "Also add that I had pizza for lunch")
-  - READ: Query without modification (e.g., "When is my meeting with John?", "Did I pay Alice?")
-- "update_fields": object with only the specific fields to change for UPDATE operations, null otherwise.
+- CRUD: Use this when the user is reading, updating, or deleting something that ALREADY EXISTS in their data.
+  - READING their own data: "What are my pending tasks?", "Show my tasks", "Did I log anything about gym?", "What do I owe Aryan?" → CRUD READ
+  - UPDATING: "Mark meeting with John as done", "I watched Interstellar", "Aryan paid me back" → CRUD UPDATE
+  - DELETING: "Cancel my meeting", "Remove the gym task" → CRUD DELETE
+  - APPENDING to journal: "Also add that I had pizza" → CRUD APPEND
+  USE THE MEMORY CONTEXT to find resolved_id. Set operation to UPDATE/DELETE/APPEND/READ.
 
-STEP 5 — CLASSIFY (CREATE & CRUD only):
-Classify into primary_bucket: tasks | ideas | journals | finance | health | watchlist | others.
-- Watchlist: Any recognizable movie, show, anime, or documentary name (e.g., "Houseful 4", "Inception", "Naruto") MUST go to watchlist, even without the word "watch".
-- "I watched Interstellar" → CRUD, watchlist, operation: UPDATE, update_fields: { "is_watched": true }, resolved_id from memory.
+- CHAT: ONLY for general knowledge questions with NO connection to the user's stored data.
+  Examples of CHAT: "What is the capital of France?", "Should I work out today?", "Tell me a joke."
+  Examples NOT chat (they are CRUD): "What are my tasks?", "Do I owe anyone money?", "What movies did I add?"
 
-STEP 6 — EXTRACT (CREATE only): Populate the exact fields defined in the schema for that item's primary_bucket inside "extracted".
+- CREATE: Adding a brand new item that does NOT exist in memory context.
+
+For CRUD items, populate:
+- "resolved_id": exact "id" from Memory Context for the matching item, or null.
+- "operation": "UPDATE" | "DELETE" | "APPEND" | "READ"
+- "update_fields": object with only specific fields to change for UPDATE, null otherwise.
+
+STEP 5 — CLASSIFY bucket (CREATE & CRUD only):
+Classify into: tasks | ideas | journals | finance | health | watchlist | others.
+
+WATCHLIST RULES (very important):
+- Any input that is ONLY a movie, show, anime, or documentary title MUST go to watchlist as CREATE.
+- This applies even if you are not 100% sure it's a title — if it is a short 1-5 word proper noun with no other context (no verbs, no action words), treat it as a watchlist CREATE.
+- Examples: "Dilwale" → watchlist. "Phir Hera Pheri" → watchlist. "Inception" → watchlist. "Naruto" → watchlist. "Houseful 4" → watchlist.
+- "I watched Dilwale" → CRUD, watchlist, operation: UPDATE, update_fields: { "is_watched": true }.
+- "Dilwale was amazing" → watchlist CREATE (user wants to log it).
+
+STEP 6 — EXTRACT (CREATE only): Populate extracted fields from schema for that bucket.
 """
+
 
 SCHEMA_REFERENCE = """EXTRACTION SCHEMAS (populate these fields directly in the "extracted" object):
 - tasks: { "title": "string", "due_date": "YYYY-MM-DD" or null, "due_time": "HH:MM" or null, "reminder_required": boolean }
