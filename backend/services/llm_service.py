@@ -69,14 +69,10 @@ For CRUD items, populate:
 STEP 5 — CLASSIFY bucket (CREATE & CRUD only):
 Classify into: tasks | ideas | journals | finance | health | watchlist | others.
 
-WATCHLIST RULES (very important):
-- Any input that is ONLY a movie, show, anime, or documentary title MUST go to watchlist as CREATE.
-- This applies even if you are not 100% sure it's a title — if it is a short 1-5 word proper noun with no other context (no verbs, no action words), treat it as a watchlist CREATE.
-- Examples: "Dilwale" → watchlist. "Phir Hera Pheri" → watchlist. "Inception" → watchlist. "Naruto" → watchlist. "Houseful 4" → watchlist.
-- "I watched Dilwale" → CRUD, watchlist, operation: UPDATE, update_fields: { "is_watched": true }.
-- "Dilwale was amazing" → watchlist CREATE (user wants to log it).
-
-STEP 6 — EXTRACT (CREATE only): Populate extracted fields from schema for that bucket.
+WATCHLIST & OTHERS RULES:
+- Classify into `watchlist` ONLY if there is clear media intent (e.g. "watch Dilwale", "movie Phir Hera Pheri") or high confidence it is a known movie/show/anime title (e.g. "Houseful 4", "Inception").
+- "I watched Dilwale" → CRUD, watchlist, operation: UPDATE, update_fields: { "is_watched": true }, resolved_id from memory.
+- UNCERTAINTY RULE: If you are NOT SURE whether a word/phrase is a movie/show or if it lacks clear bucket signals (confidence < 0.6), you MUST classify it into `others`. Do NOT default ambiguous proper nouns to watchlist.
 """
 
 
