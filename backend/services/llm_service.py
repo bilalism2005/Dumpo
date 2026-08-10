@@ -30,7 +30,8 @@ FORMAT:
       "extracted": { <key_value_pairs> or null },
       "resolved_id": "<string_uuid> or null",
       "operation": "<string> or null",
-      "update_fields": { <key_value_pairs> or null }
+      "update_fields": { <key_value_pairs> or null },
+      "confidence": <float_0_to_1>
     } 
   ] 
 }
@@ -44,6 +45,7 @@ STEP 2 — DUMP TYPE:
 
 STEP 3 — JOURNAL SEGMENT: If dump_type is narrative or mixed, extract the continuous story part into `journal_segment`. Otherwise null.
 - If the Memory Context contains a journal for today's date, set journal_segment to the narrative text — the system handles merging.
+- IMPORTANT: Narrative content extracted into `journal_segment` MUST NOT be duplicated as separate `atomic_items`.
 
 STEP 4 — SPLIT & ROUTE ATOMIC ITEMS:
 For each item, determine its `action_type`:
@@ -57,7 +59,7 @@ For each item, determine its `action_type`:
 
 - CHAT: ONLY for general knowledge questions with NO connection to the user's stored data, OR when answering a direct question from the Chat Context (e.g. "Yes").
   Examples of CHAT: "What is the capital of France?", "Should I work out today?"
-  Examples NOT chat (they are CRUD): "What are my tasks?"
+  Examples NOT chat (they are CRUD): "What are my tasks?", "Did I run today?"
 
 - CREATE: Adding a brand new item that does NOT exist in memory context.
   IMPORTANT TASK RULES:
@@ -78,7 +80,11 @@ Classify into: tasks | ideas | journals | finance | health | watchlist | others.
 
 WATCHLIST RULES & CONTEXT:
 - Classify into `watchlist` ONLY if there is clear media intent OR if the Chat Context shows you just asked the user if they wanted to add it to their watchlist and they replied affirmatively.
+- Examples: "Watch Peaky Blinders" -> genre: thriller. "Watch Interstellar" -> genre: others.
 - UNCERTAINTY RULE: If you are NOT SURE whether a word/phrase is a movie/show, classify it into `others`.
+
+FINANCE RULES:
+- Examples: "I owe Aryan 500" -> category: pay. "Aryan owes me 500" -> category: receive.
 """
 
 
@@ -100,6 +106,27 @@ def clean_response_text(text: str) -> str:
     if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
         return text[first_bracket:last_bracket + 1]
     return text
+
+def validate_crud_fields(bucket: str, resolved_id: Optional[str], update_fields: Dict[str, Any], memory_context: str) -> (Optional[str], Dict[str, Any]):
+    """Ensure CRUD safety: discard hallucinated IDs and whitelist update fields."""
+    if resolved_id and resolved_id not in memory_context:
+        resolved_id = None
+        
+    if update_fields and isinstance(update_fields, dict):
+        allowed = {
+            "tasks": ["is_complete", "title", "due_date", "due_time", "reminder_required"],
+            "watchlist": ["is_watched", "title", "genre", "content_type", "platform", "language", "year_of_launch"],
+            "finance": ["is_settled", "description", "amount", "currency", "category"],
+            "ideas": ["title", "description"],
+            "journals": ["title", "content"],
+            "health": ["title", "description", "health_type"],
+            "others": ["raw_text"]
+        }.get(bucket, [])
+        update_fields = {k: v for k, v in update_fields.items() if k in allowed}
+    else:
+        update_fields = {}
+        
+    return resolved_id, update_fields
 
 def validate_extracted_fields(bucket: str, extracted: Dict[str, Any], formatted_text: str, default_date: str) -> Dict[str, Any]:
     """Ensure that the extracted data matches expected schemas and has fallback values if LLM misses them."""
@@ -216,11 +243,14 @@ async def router_node_llm(text: str, user_id: str, memory_context: str = "", cur
     chat_context = ""
     if chat_history:
         formatted_msgs = []
-        for msg in chat_history:
+        # Cap chat history to last 5 turns to prevent token explosion
+        for msg in chat_history[:5]:
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
             formatted_msgs.append(f"{role.capitalize()}: {content}")
         chat_context = "\n".join(formatted_msgs)
+        if len(chat_context) > 2000:
+            chat_context = chat_context[:2000] + "\n[truncated]"
         
     # Fallback to local Indian Standard Time (IST, UTC+5:30) to avoid timezone offsets causing date mismatches
     if not current_time_context:
@@ -275,6 +305,19 @@ async def router_node_llm(text: str, user_id: str, memory_context: str = "", cur
                 elif item.get("action_type") == "CRUD":
                     if not item.get("extracted"):
                          item["extracted"] = {}
+                    
+                    # Validate CRUD ID and fields
+                    r_id = item.get("resolved_id")
+                    u_fields = item.get("update_fields") or {}
+                    safe_id, safe_fields = validate_crud_fields(primary, r_id, u_fields, memory_context)
+                    item["resolved_id"] = safe_id
+                    item["update_fields"] = safe_fields
+                    
+                    # If confidence is low, discard resolved_id to force clarification prompt
+                    conf = item.get("confidence", 1.0)
+                    if conf < 0.6 and item.get("operation") in ["UPDATE", "DELETE", "APPEND"]:
+                        item["resolved_id"] = None
+                        
                 else:
                     item["extracted"] = {"raw_text": formatted_text}
             

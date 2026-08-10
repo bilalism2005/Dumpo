@@ -338,8 +338,17 @@ async def reclassify_item(
             
         new_item_id = target_res.data[0]["id"]
         
-        # 4. Delete source item
-        supabase.table(from_bucket).delete().eq("id", item_id).eq("user_id", user_id).execute()
+        # 4. Delete source item with rollback if it fails
+        try:
+            supabase.table(from_bucket).delete().eq("id", item_id).eq("user_id", user_id).execute()
+        except Exception as delete_err:
+            logger.error(f"Delete failed during reclassify for {item_id}: {delete_err}")
+            # ROLLBACK: Delete the newly created target item to prevent duplicates
+            try:
+                supabase.table(to_bucket).delete().eq("id", new_item_id).execute()
+            except Exception as rollback_err:
+                logger.error(f"CRITICAL: Rollback failed for {new_item_id} after delete failure on {item_id}: {rollback_err}")
+            raise HTTPException(status_code=500, detail="Failed to remove source item. Operation rolled back.")
         
         # Update the assistant message log inside the unified chat_messages table
         try:

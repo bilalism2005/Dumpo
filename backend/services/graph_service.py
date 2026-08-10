@@ -4,7 +4,6 @@ from typing import TypedDict, List, Dict, Any, Optional, Annotated
 import asyncio
 import operator
 from langgraph.graph import StateGraph, END
-from langgraph.store.memory import InMemoryStore
 from backend.services.llm_service import router_node_llm, client, MODEL_NAME, merge_journals_narrative
 from backend.services.bucket_service import write_to_bucket
 from backend.services.supabase_service import get_supabase_client
@@ -20,6 +19,7 @@ class AgentState(TypedDict):
     message_id: str
     current_time_context: Optional[str]
     chat_history: List[Dict[str, Any]]
+    live_memory: Dict[str, Any]
 
     # Router Outputs
     dump_type: str
@@ -32,9 +32,6 @@ class AgentState(TypedDict):
     items: Annotated[List[Dict[str, Any]], operator.add]
     success: bool
 
-# ─── LangGraph InMemoryStore ──────────────────────────────────────────────────
-memory_store = InMemoryStore()
-
 BUCKET_TABLE_MAP = {
     "tasks":     "tasks",
     "ideas":     "ideas",
@@ -45,10 +42,10 @@ BUCKET_TABLE_MAP = {
 }
 
 
-def sync_user_memory(user_id: str, today: str):
+def get_live_user_memory(user_id: str, today: str) -> Dict[str, Any]:
     """
-    Sync a compressed snapshot of the user's active data across ALL buckets into
-    LangGraph InMemoryStore so the Router LLM can resolve CRUD entity IDs.
+    Fetch a compressed snapshot of the user's active data across ALL buckets directly from DB
+    so the Router LLM can resolve CRUD entity IDs.
 
     Caps (total ~100 items, ~1300 tokens max):
       tasks     → 30  (active/incomplete only)
@@ -108,15 +105,16 @@ def sync_user_memory(user_id: str, today: str):
             "journals":  journal_res.data or [],
         }
 
-        memory_store.put(("memories", user_id), "user_data", memories)
         logger.info(
-            f"Memory synced for {user_id}: "
+            f"Live memory fetched for {user_id}: "
             f"tasks={len(memories['tasks'])}, watchlist={len(memories['watchlist'])}, "
             f"ideas={len(memories['ideas'])}, finance={len(memories['finance'])}, "
             f"health={len(memories['health'])}, journals={len(memories['journals'])}"
         )
+        return memories
     except Exception as e:
-        logger.error(f"Error syncing user memory: {e}")
+        logger.error(f"Error fetching live user memory: {e}")
+        return {}
 
 
 def normalize_update_fields(bucket: str, update_fields: Dict[str, Any]) -> Dict[str, Any]:
@@ -193,13 +191,16 @@ def fuzzy_search_bucket(user_id: str, bucket: str, query: str, limit: int = 5) -
     title_col = "description" if bucket == "finance" else "title"
     try:
         stop_words = {"mark", "as", "done", "complete", "completed", "delete", "remove", "cancel", "update", "change", "the", "my", "to", "task", "idea", "item"}
-        words = [w for w in query.strip().split() if w.lower() not in stop_words]
-        keyword = words[0] if words else (query.strip().split()[-1] if query.strip() else query)
-        res = supabase.table(table)\
-            .select(f"id, {title_col}")\
-            .eq("user_id", user_id)\
-            .ilike(title_col, f"%{keyword}%")\
-            .limit(limit).execute()
+        words = [w for w in query.strip().split() if len(w) > 2 and w.lower() not in stop_words]
+        
+        if not words:
+            return []
+            
+        query_obj = supabase.table(table).select(f"id, {title_col}").eq("user_id", user_id)
+        for w in words:
+            query_obj = query_obj.ilike(title_col, f"%{w}%")
+            
+        res = query_obj.limit(limit).execute()
         return res.data or []
     except Exception as e:
         logger.error(f"Fuzzy search failed for {bucket}: {e}")
@@ -225,12 +226,10 @@ async def router_node(state: AgentState) -> AgentState:
     except Exception:
         today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date().isoformat()
 
-    sync_user_memory(user_id, today)
-
-    stored_memories = memory_store.get(("memories", user_id), "user_data")
+    memories = get_live_user_memory(user_id, today)
     memory_context = ""
-    if stored_memories and stored_memories.value:
-        memory_context = json.dumps(stored_memories.value, ensure_ascii=False)
+    if memories:
+        memory_context = json.dumps(memories, ensure_ascii=False)
 
     # Fetch recent conversation history (last 10 turns) to give Router context
     recent_history = []
@@ -260,6 +259,7 @@ async def router_node(state: AgentState) -> AgentState:
         "dump_type": router_output.get("dump_type", "atomic"),
         "journal_segment": router_output.get("journal_segment"),
         "atomic_items": router_output.get("atomic_items", []),
+        "live_memory": memories
     }
 
 
@@ -345,7 +345,6 @@ async def _execute_crud(
                 supabase.table(table).delete()
                     .eq("id", record_id).eq("user_id", user_id).execute()
             )
-            memory_store.delete(("memories", user_id), "user_data")
             return {
                 "id": record_id, "primary_bucket": bucket,
                 "bucket_tags": [_bucket_tag(bucket)],
@@ -365,7 +364,6 @@ async def _execute_crud(
                 supabase.table(table).update(update_fields)
                     .eq("id", record_id).eq("user_id", user_id).execute()
             )
-            memory_store.delete(("memories", user_id), "user_data")
             return {
                 "id": record_id, "primary_bucket": bucket,
                 "bucket_tags": [_bucket_tag(bucket)],
@@ -384,7 +382,6 @@ async def _execute_crud(
                 supabase.table(table).update({"content": merged})
                     .eq("id", record_id).eq("user_id", user_id).execute()
             )
-            memory_store.delete(("memories", user_id), "user_data")
             return {
                 "id": record_id, "primary_bucket": "journals",
                 "bucket_tags": ["📓 Journal"],
@@ -433,8 +430,7 @@ async def crud_node(state: AgentState) -> AgentState:
 
         # ── READ with no specific ID: return formatted list from memory ────────
         if operation == "READ" and not resolved_id:
-            stored = memory_store.get(("memories", user_id), "user_data")
-            mem = stored.value if stored and stored.value else {}
+            mem = state.get("live_memory", {})
             bucket_data = mem.get(bucket, [])
             if not bucket_data:
                 crud_responses.append({
@@ -589,7 +585,7 @@ workflow.add_edge("crud_node",            "output_compiler_node")
 workflow.add_edge("chatbot_node",         "output_compiler_node")
 workflow.add_edge("output_compiler_node", END)
 
-dumpo_graph = workflow.compile(store=memory_store)
+dumpo_graph = workflow.compile()
 
 
 # ─── Entry Point ─────────────────────────────────────────────────────────────
@@ -604,6 +600,7 @@ async def process_user_dump_graph(
         "message_id": message_id,
         "current_time_context": current_time_context,
         "chat_history": [],
+        "live_memory": {},
         "dump_type": "",
         "journal_segment": None,
         "atomic_items": [],
