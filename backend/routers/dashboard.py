@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from datetime import datetime
 from typing import List, Optional
 from backend.routers.auth import get_current_user_id
@@ -55,10 +55,6 @@ async def get_dashboard(
             "overdue_count": len(overdue_tasks)
         }
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "today_tasks": [],
-            "overdue_tasks": [],
-            "overdue_count": 0
-        }
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))

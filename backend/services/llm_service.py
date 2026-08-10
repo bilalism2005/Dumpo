@@ -252,16 +252,15 @@ async def router_node_llm(text: str, user_id: str, memory_context: str = "", cur
         if len(chat_context) > 2000:
             chat_context = chat_context[:2000] + "\n[truncated]"
         
-    # Fallback to local Indian Standard Time (IST, UTC+5:30) to avoid timezone offsets causing date mismatches
+    # Use UTC if no time context provided
     if not current_time_context:
-        ist_tz = timezone(timedelta(hours=5, minutes=30))
-        current_time_context = datetime.now(ist_tz).isoformat()
+        current_time_context = datetime.now(timezone.utc).isoformat()
 
     # Extract date representation from time context for journal/task default fallbacks
     try:
         default_date = current_time_context.split("T")[0]
     except Exception:
-        default_date = datetime.now(timezone(timedelta(hours=5, minutes=30))).date().isoformat()
+        default_date = datetime.now(timezone.utc).date().isoformat()
 
     user_prompt = f"{SCHEMA_REFERENCE}\nCurrent Time Context: {current_time_context}\nChat Context:\n{chat_context}\n\nMemory Context:\n{memory_context}\n\nRaw Thought: {text}"
     

@@ -222,9 +222,13 @@ async def router_node(state: AgentState) -> AgentState:
     user_id = state["user_id"]
 
     try:
-        today = state["current_time_context"].split("T")[0]
+        current_time = state.get("current_time_context")
+        if current_time:
+            today = current_time.split("T")[0]
+        else:
+            today = datetime.now(timezone.utc).date().isoformat()
     except Exception:
-        today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date().isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
 
     memories = get_live_user_memory(user_id, today)
     memory_context = ""
@@ -259,7 +263,8 @@ async def router_node(state: AgentState) -> AgentState:
         "dump_type": router_output.get("dump_type", "atomic"),
         "journal_segment": router_output.get("journal_segment"),
         "atomic_items": router_output.get("atomic_items", []),
-        "live_memory": memories
+        "live_memory": memories,
+        "chat_history": recent_history
     }
 
 
@@ -428,10 +433,22 @@ async def crud_node(state: AgentState) -> AgentState:
         update_fields = item.get("update_fields") or {}
         text          = item.get("formatted_text", "")
 
-        # ── READ with no specific ID: return formatted list from memory ────────
+        # ── READ with no specific ID: query database directly ────────
         if operation == "READ" and not resolved_id:
-            mem = state.get("live_memory", {})
-            bucket_data = mem.get(bucket, [])
+            table = BUCKET_TABLE_MAP.get(bucket, bucket)
+            try:
+                loop = asyncio.get_running_loop()
+                read_res = await loop.run_in_executor(None, lambda:
+                    supabase.table(table).select("*")
+                        .eq("user_id", user_id)
+                        .order("created_at", desc=True)
+                        .limit(50).execute()
+                )
+                bucket_data = read_res.data or []
+            except Exception as e:
+                logger.error(f"Fallback READ query failed for {bucket}: {e}")
+                bucket_data = []
+                
             if not bucket_data:
                 crud_responses.append({
                     "primary_bucket": bucket, "bucket_tags": [_bucket_tag(bucket)],
@@ -619,6 +636,9 @@ async def process_user_dump_graph(
 
     final_state = await dumpo_graph.ainvoke(initial_state)
     response_items = final_state.get("items", [])
+
+    if not response_items:
+        return {"success": False, "items": []}
 
     for item in response_items:
         try:

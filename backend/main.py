@@ -43,6 +43,24 @@ rate_limit_records = defaultdict(list)
 RATE_LIMIT_MAX = 60
 RATE_LIMIT_WINDOW = 60.0 # seconds
 
+async def cleanup_rate_limits():
+    """Background task to periodically clean up expired rate limit records."""
+    while True:
+        import asyncio
+        await asyncio.sleep(RATE_LIMIT_WINDOW * 2)
+        current_time = time.time()
+        for key in list(rate_limit_records.keys()):
+            valid = [t for t in rate_limit_records[key] if current_time - t < RATE_LIMIT_WINDOW]
+            if not valid:
+                del rate_limit_records[key]
+            else:
+                rate_limit_records[key] = valid
+
+@app.on_event("startup")
+async def startup_event():
+    import asyncio
+    asyncio.create_task(cleanup_rate_limits())
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     # Exclude health check from rate limiting

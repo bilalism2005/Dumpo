@@ -14,13 +14,14 @@ async def get_current_user_id(authorization: Optional[str] = Header(None, descri
             detail="Authorization header missing"
         )
         
-    if not authorization.startswith("Bearer "):
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0] != "Bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Must start with 'Bearer '"
+            detail="Invalid authorization header format. Must be 'Bearer <token>'"
         )
         
-    token = authorization.split(" ")[1]
+    token = parts[1]
     
     try:
         # Call Supabase Auth API to get the user from JWT
