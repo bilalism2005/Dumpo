@@ -48,8 +48,6 @@ export function DashboardScreen() {
       {isLoading ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator color="#a855f7" size="large" />
-          <Text style={styles.loaderText}>Waking up Dumpo backend...</Text>
-          <Text style={styles.loaderSubtext}>This can take up to 50 seconds if the app was idle.</Text>
         </View>
       ) : (
         <ScrollView 
