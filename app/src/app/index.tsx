@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { Redirect } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -7,30 +7,47 @@ import * as SplashScreen from 'expo-splash-screen';
 export default function IndexRoute() {
   const { session, isLoading, loadSession } = useAuthStore();
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const unsub = useAuthStore.persist.onFinishHydration(() => {
       setHasHydrated(true);
-      loadSession();
     });
     
     if (useAuthStore.persist.hasHydrated()) {
       setHasHydrated(true);
-      loadSession();
     }
     
     return () => unsub();
   }, []);
 
+  // Once hydrated, decide immediately
   useEffect(() => {
-    if (hasHydrated && !isLoading) {
-      // Hide splash screen smoothly only when we are ready to route!
-      SplashScreen.hideAsync();
-    }
-  }, [hasHydrated, isLoading]);
+    if (!hasHydrated) return;
 
-  if (!hasHydrated || isLoading) {
-    // Return null so the Native Splash Screen stays uninterrupted
+    const cachedSession = useAuthStore.getState().session;
+
+    if (cachedSession) {
+      // We have a cached session — route IMMEDIATELY, refresh token silently in background
+      SplashScreen.hideAsync();
+      setReady(true);
+      loadSession(); // silent background refresh
+    } else {
+      // No cached session — need to check network
+      loadSession();
+    }
+  }, [hasHydrated]);
+
+  // Handle the case where there was no cached session and loadSession finishes
+  useEffect(() => {
+    if (hasHydrated && !isLoading && !ready) {
+      SplashScreen.hideAsync();
+      setReady(true);
+    }
+  }, [hasHydrated, isLoading, ready]);
+
+  if (!ready) {
+    // Keep splash screen visible — render nothing
     return null;
   }
 
@@ -41,12 +58,3 @@ export default function IndexRoute() {
 
   return <Redirect href="/auth/login" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0f',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});

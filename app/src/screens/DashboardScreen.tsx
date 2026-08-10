@@ -43,9 +43,11 @@ export function DashboardScreen() {
     router.push(`/buckets/${bucketKey}`);
   };
 
+  const hasAnyData = combinedTasks.length > 0;
+
   return (
     <SafeAreaView style={styles.safeContainer}>
-      {isLoading ? (
+      {isLoading && !hasAnyData ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator color="#a855f7" size="large" />
         </View>
