@@ -369,8 +369,9 @@ async def merge_journals_narrative(old_content: str, new_content: str, journal_d
         "Instructions:\n"
         "- Output plain prose only. Do not write markdown, bold headers, or bullet points.\n"
         "- Maintain the casual, reflective, personal tone of the original entries.\n"
-        "- Keep the narrative under 250 words and chronological.\n"
-        "- Do not add external facts or imaginary events. Just merge the provided text."
+        "- MAKE MINIMAL EDITS. Only fix spelling mistakes and ensure chronological sequence.\n"
+        "- DO NOT hallucinate, DO NOT add extra flowery language, and DO NOT make the entry longer than the original text.\n"
+        "- Do not add external facts or imaginary events. Just merge the provided text exactly as it was meant."
     )
     
     max_retries = 2

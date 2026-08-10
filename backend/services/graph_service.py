@@ -30,7 +30,6 @@ class AgentState(TypedDict):
     response_messages: Annotated[List[str], operator.add]
     bucket_tags: Annotated[List[str], operator.add]
     items: Annotated[List[Dict[str, Any]], operator.add]
-    success: bool
 
 BUCKET_TABLE_MAP = {
     "tasks":     "tasks",
@@ -334,7 +333,7 @@ async def create_node(state: AgentState) -> AgentState:
         except Exception as e:
             logger.error(f"Failed to create item in {primary}: {e}")
 
-    return {"items": new_items, "success": True}
+    return {"items": new_items}
 
 
 async def _execute_crud(
@@ -501,7 +500,7 @@ async def crud_node(state: AgentState) -> AgentState:
                 "extracted": {}, "reminder_set": False, "reminder_text": None
             })
 
-    return {"items": crud_responses, "success": True}
+    return {"items": crud_responses}
 
 
 
@@ -554,11 +553,11 @@ async def chatbot_node(state: AgentState) -> AgentState:
         except Exception as e:
             logger.error(f"Chatbot failed: {e}")
 
-    return {"items": chat_responses, "success": True}
+    return {"items": chat_responses}
 
 
 async def output_compiler_node(state: AgentState) -> AgentState:
-    return {"success": True}
+    return {}
 
 
 def route_from_router(state: AgentState) -> List[str]:
@@ -623,8 +622,7 @@ async def process_user_dump_graph(
         "atomic_items": [],
         "response_messages": [],
         "bucket_tags": [],
-        "items": [],
-        "success": False
+        "items": []
     }
 
     try:
