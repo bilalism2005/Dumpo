@@ -21,7 +21,7 @@ export function WatchlistScreen() {
   const [activeGenre, setActiveGenre] = useState<string | null>(null);
 
   useEffect(() => {
-    const hasCachedData = watchlistItems.length > 0;
+    const hasCachedData = movies.length > 0;
     fetchBucketItems('watchlist', hasCachedData);
   }, []);
 

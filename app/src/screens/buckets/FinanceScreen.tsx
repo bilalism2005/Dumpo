@@ -24,7 +24,7 @@ export function FinanceScreen() {
   const [selectedFilter, setSelectedFilter] = useState<{ month: string; category: string } | null>(null);
 
   useEffect(() => {
-    const hasCachedData = financeItems.length > 0;
+    const hasCachedData = transactions.length > 0;
     fetchBucketItems('finance', hasCachedData);
   }, []);
 

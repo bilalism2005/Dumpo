@@ -20,7 +20,7 @@ export function HealthScreen() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
   useEffect(() => {
-    const hasCachedData = healthItems.length > 0;
+    const hasCachedData = entries.length > 0;
     fetchBucketItems('health', hasCachedData);
   }, []);
 

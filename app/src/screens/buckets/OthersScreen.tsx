@@ -14,7 +14,7 @@ export function OthersScreen() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   useEffect(() => {
-    const hasCachedData = othersItems.length > 0;
+    const hasCachedData = others.length > 0;
     fetchBucketItems('others', hasCachedData);
   }, []);
 
