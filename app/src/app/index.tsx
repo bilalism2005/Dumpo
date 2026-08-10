@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { Redirect } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 
 export default function IndexRoute() {
   const { session, isLoading, loadSession } = useAuthStore();
@@ -21,12 +22,16 @@ export default function IndexRoute() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (hasHydrated && !isLoading) {
+      // Hide splash screen smoothly only when we are ready to route!
+      SplashScreen.hideAsync();
+    }
+  }, [hasHydrated, isLoading]);
+
   if (!hasHydrated || isLoading) {
-    return (
-      <View style={styles.container}>
-        {!hasHydrated ? null : <ActivityIndicator size="large" color="#a855f7" />}
-      </View>
-    );
+    // Return null so the Native Splash Screen stays uninterrupted
+    return null;
   }
 
   // Redirect based on session status
