@@ -14,7 +14,8 @@ export function OthersScreen() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchBucketItems('others');
+    const hasCachedData = othersItems.length > 0;
+    fetchBucketItems('others', hasCachedData);
   }, []);
 
   const handleOpenReclassify = (itemId: string) => {

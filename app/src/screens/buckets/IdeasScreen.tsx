@@ -9,7 +9,8 @@ export function IdeasScreen() {
   const ideas = bucketItems['ideas'] || [];
 
   useEffect(() => {
-    fetchBucketItems('ideas');
+    const hasCachedData = ideas.length > 0;
+    fetchBucketItems('ideas', hasCachedData);
   }, []);
 
   return (

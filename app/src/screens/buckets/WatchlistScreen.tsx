@@ -21,7 +21,8 @@ export function WatchlistScreen() {
   const [activeGenre, setActiveGenre] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchBucketItems('watchlist');
+    const hasCachedData = watchlistItems.length > 0;
+    fetchBucketItems('watchlist', hasCachedData);
   }, []);
 
   const handleToggleWatched = async (itemId: string) => {

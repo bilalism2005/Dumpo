@@ -12,7 +12,8 @@ export function JournalScreen() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchBucketItems('journals');
+    const hasCachedData = journals.length > 0;
+    fetchBucketItems('journals', hasCachedData);
   }, []);
 
   const handleUpdateContent = (entry: any, newContent: string) => {

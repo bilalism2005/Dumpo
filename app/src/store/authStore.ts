@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from '../services/supabase';
@@ -45,7 +46,39 @@ interface AuthState {
   loadSession: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+const secureStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(name);
+      }
+      return null;
+    }
+    return await SecureStore.getItemAsync(name);
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(name, value);
+      }
+      return;
+    }
+    await SecureStore.setItemAsync(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(name);
+      }
+      return;
+    }
+    await SecureStore.deleteItemAsync(name);
+  },
+};
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
   user: null,
   session: null,
   isLoading: false,
@@ -108,7 +141,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   
   loadSession: async () => {
-    set({ isLoading: true });
+    const hasCachedSession = !!get().session;
+    if (!hasCachedSession) {
+      set({ isLoading: true });
+    }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -122,7 +158,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, session: null, isLoading: false });
     }
   },
-}));
+  }),
+  {
+    name: 'auth-storage',
+    storage: createJSONStorage(() => secureStorage),
+    partialize: (state) => ({ user: state.user, session: state.session }),
+  }
+));
 
 // Set up auth state change listener to sync SecureStore/localStorage token automatically
 supabase.auth.onAuthStateChange(async (event, session) => {

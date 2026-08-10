@@ -17,7 +17,7 @@ interface DashboardState {
   realtimeChannel: RealtimeChannel | null;
   
   fetchDashboard: (currentDate?: string, silent?: boolean) => Promise<void>;
-  fetchBucketItems: (bucketName: string) => Promise<void>;
+  fetchBucketItems: (bucketName: string, silent?: boolean) => Promise<void>;
   toggleTaskComplete: (taskId: string) => Promise<void>;
   toggleTaskReminder: (taskId: string) => Promise<void>;
   updateBucketItem: (bucket: string, itemId: string, payload: any) => Promise<void>;
@@ -87,8 +87,8 @@ export const useDashboardStore = create<DashboardState>()(
     }
   },
   
-  fetchBucketItems: async (bucketName) => {
-    set({ isLoading: true });
+  fetchBucketItems: async (bucketName: string, silent = false) => {
+    if (!silent) set({ isLoading: true });
     try {
       const response = await apiRequest(`/api/v1/buckets/${bucketName}`, 'GET');
       set((state) => ({

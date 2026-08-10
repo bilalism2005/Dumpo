@@ -1,19 +1,23 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuthStore } from '../store/authStore';
 import { Redirect } from 'expo-router';
 
 export default function IndexRoute() {
   const { session, isLoading, loadSession } = useAuthStore();
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
+    const unsub = useAuthStore.persist.onFinishHydration(() => setHasHydrated(true));
+    setHasHydrated(useAuthStore.persist.hasHydrated());
     loadSession();
+    return () => unsub();
   }, []);
 
-  if (isLoading) {
+  if (!hasHydrated || isLoading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#a855f7" />
+        {!hasHydrated ? null : <ActivityIndicator size="large" color="#a855f7" />}
       </View>
     );
   }

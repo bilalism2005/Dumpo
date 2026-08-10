@@ -13,7 +13,8 @@ export function TasksScreen() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    fetchBucketItems('tasks');
+    const hasCachedData = tasks.length > 0;
+    fetchBucketItems('tasks', hasCachedData);
   }, []);
 
   const handleToggleExpand = (groupKey: string) => {
