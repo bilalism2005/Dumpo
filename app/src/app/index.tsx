@@ -8,9 +8,16 @@ export default function IndexRoute() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
-    const unsub = useAuthStore.persist.onFinishHydration(() => setHasHydrated(true));
-    setHasHydrated(useAuthStore.persist.hasHydrated());
-    loadSession();
+    const unsub = useAuthStore.persist.onFinishHydration(() => {
+      setHasHydrated(true);
+      loadSession();
+    });
+    
+    if (useAuthStore.persist.hasHydrated()) {
+      setHasHydrated(true);
+      loadSession();
+    }
+    
     return () => unsub();
   }, []);
 
