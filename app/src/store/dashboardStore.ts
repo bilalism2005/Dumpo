@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { apiRequest } from '../services/api';
 import { supabase } from '../services/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
@@ -25,6 +26,36 @@ interface DashboardState {
   subscribeRealtime: (userId: string) => void;
   unsubscribeRealtime: () => void;
 }
+
+const secureStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(name);
+      }
+      return null;
+    }
+    return await SecureStore.getItemAsync(name);
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(name, value);
+      }
+      return;
+    }
+    await SecureStore.setItemAsync(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(name);
+      }
+      return;
+    }
+    await SecureStore.deleteItemAsync(name);
+  },
+};
 
 export const useDashboardStore = create<DashboardState>()(
   persist(
@@ -226,7 +257,7 @@ export const useDashboardStore = create<DashboardState>()(
     }),
     {
       name: 'dashboard-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => secureStorage),
       partialize: (state) => ({
         todayTasks: state.todayTasks,
         somedayTasks: state.somedayTasks,
