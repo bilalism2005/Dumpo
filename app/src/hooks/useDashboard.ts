@@ -24,7 +24,9 @@ export function useDashboard() {
   } = useDashboardStore();
 
   useEffect(() => {
-    fetchDashboard();
+    // If we have cached tasks from persist middleware, fetch silently to prevent spinner
+    const hasCachedData = todayTasks.length > 0 || somedayTasks.length > 0;
+    fetchDashboard(undefined, hasCachedData);
     
     if (user?.id) {
       subscribeRealtime(user.id);

@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../services/api';
 import { supabase } from '../services/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
@@ -24,15 +26,17 @@ interface DashboardState {
   unsubscribeRealtime: () => void;
 }
 
-export const useDashboardStore = create<DashboardState>((set, get) => ({
-  todayTasks: [],
-  somedayTasks: [],
-  overdueTasks: [],
-  overdueCount: 0,
-  bucketItems: {},
-  isLoading: false,
-  error: null,
-  realtimeChannel: null,
+export const useDashboardStore = create<DashboardState>()(
+  persist(
+    (set, get) => ({
+      todayTasks: [],
+      somedayTasks: [],
+      overdueTasks: [],
+      overdueCount: 0,
+      bucketItems: {},
+      isLoading: false,
+      error: null,
+      realtimeChannel: null,
   
   fetchDashboard: async (currentDate, silent = false) => {
     if (!silent) set({ isLoading: true });
@@ -212,12 +216,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const activeChannel = channel.subscribe();
     set({ realtimeChannel: activeChannel });
   },
-  
-  unsubscribeRealtime: () => {
-    const channel = get().realtimeChannel;
-    if (channel) {
-      supabase.removeChannel(channel);
-      set({ realtimeChannel: null });
+      unsubscribeRealtime: () => {
+        const { realtimeChannel } = get();
+        if (realtimeChannel) {
+          supabase.removeChannel(realtimeChannel);
+          set({ realtimeChannel: null });
+        }
+      }
+    }),
+    {
+      name: 'dashboard-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        todayTasks: state.todayTasks,
+        somedayTasks: state.somedayTasks,
+        overdueTasks: state.overdueTasks,
+        overdueCount: state.overdueCount,
+        bucketItems: state.bucketItems,
+      }), // only persist data, not loading states or realtime channels
     }
-  }
-}));
+  )
+);
