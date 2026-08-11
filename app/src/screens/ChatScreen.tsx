@@ -74,6 +74,7 @@ export function ChatScreen() {
             data={messages}
             keyExtractor={(item) => item.id}
             keyboardShouldPersistTaps="handled"
+            inverted
             renderItem={({ item }) => (
               <MessageBubble 
                 message={item} 
@@ -81,7 +82,6 @@ export function ChatScreen() {
               />
             )}
             contentContainerStyle={styles.messagesList}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
             ListFooterComponent={isLoading && messages.length > 0 ? (
               <View style={styles.loaderContainer}>
                 <ActivityIndicator color="#a855f7" size="small" />
