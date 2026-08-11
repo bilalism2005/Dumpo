@@ -166,13 +166,3 @@ export const useAuthStore = create<AuthState>()(
   }
 ));
 
-// Set up auth state change listener to sync SecureStore/localStorage token automatically
-supabase.auth.onAuthStateChange(async (event, session) => {
-  if (session) {
-    await setToken(session.access_token);
-    useAuthStore.setState({ user: session.user, session });
-  } else {
-    await removeToken();
-    useAuthStore.setState({ user: null, session: null });
-  }
-});

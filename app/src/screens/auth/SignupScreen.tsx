@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useAuthStore } from '../../store/authStore';
-import { router } from 'expo-router';
 
 export function SignupScreen() {
   const [displayName, setDisplayName] = useState('');
@@ -13,7 +12,7 @@ export function SignupScreen() {
     if (!displayName.trim() || !email.trim() || !password.trim()) return;
     try {
       await signUp(email, password, displayName);
-      router.replace('/(app)/chat');
+      // Navigation handled reactively by index.tsx when session is set
     } catch (e) {
       // Handled by authStore error state
     }
