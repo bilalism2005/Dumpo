@@ -16,17 +16,12 @@ export function ChatScreen() {
   
   const flatListRef = useRef<FlatList>(null);
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 200);
-    }
-  }, [messages.length]);
-
+  // Scroll to bottom when sending a message
   const handleSend = (text: string) => {
     sendMessage(text);
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
   };
 
   const handleTapTag = (bucketKey: string, messageId: string) => {
@@ -68,7 +63,7 @@ export function ChatScreen() {
         </View>
 
         {/* 2. Messages List */}
-        {isLoading && messages.length <= 1 ? (
+        {isLoading && messages.length === 0 ? (
           <View style={styles.historyLoader}>
             <ActivityIndicator color="#a855f7" size="large" />
             <Text style={styles.historyLoaderText}>Loading chat history...</Text>
@@ -87,7 +82,7 @@ export function ChatScreen() {
             )}
             contentContainerStyle={styles.messagesList}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-            ListFooterComponent={isLoading ? (
+            ListFooterComponent={isLoading && messages.length > 0 ? (
               <View style={styles.loaderContainer}>
                 <ActivityIndicator color="#a855f7" size="small" />
                 <Text style={styles.loaderText}>Dumpo is processing...</Text>

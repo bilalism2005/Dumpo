@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { apiRequest } from '../services/api';
 import * as Crypto from 'expo-crypto';
 
@@ -17,21 +20,53 @@ interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
-  fetchMessages: () => Promise<void>;
+  fetchMessages: (silent?: boolean) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   clearChat: () => void;
   reclassifyMessageItem: (messageId: string, toBucket: string) => Promise<void>;
 }
 
+const secureStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(name);
+      }
+      return null;
+    }
+    return await SecureStore.getItemAsync(name);
+  },
+  setItem: async (name: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(name, value);
+      }
+      return;
+    }
+    await SecureStore.setItemAsync(name, value);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(name);
+      }
+      return;
+    }
+    await SecureStore.deleteItemAsync(name);
+  },
+};
+
 import { scheduleTaskReminder } from '../services/notificationService';
 
-export const useChatStore = create<ChatState>((set, get) => ({
-  messages: [],
-  isLoading: false,
-  error: null,
-  
-  fetchMessages: async () => {
-    set({ isLoading: true });
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set, get) => ({
+      messages: [],
+      isLoading: false,
+      error: null,
+      
+      fetchMessages: async (silent = false) => {
+        if (!silent) set({ isLoading: true });
     try {
       const response = await apiRequest('/api/v1/chat/history', 'GET');
       if (response.success && response.messages) {
@@ -194,4 +229,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     }
   }
-}));
+}),
+{
+  name: 'chat-storage',
+  storage: createJSONStorage(() => secureStorage),
+  partialize: (state) => ({ messages: state.messages }),
+}
+)
+);
