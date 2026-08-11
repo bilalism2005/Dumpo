@@ -75,13 +75,18 @@ export const useDashboardStore = create<DashboardState>()(
       const dateParam = currentDate ? `?current_date=${currentDate}` : '';
       const response = await apiRequest(`/api/v1/dashboard${dateParam}`, 'GET');
       
-      set({
+      set((state) => ({
         todayTasks: response.today_tasks || [],
         somedayTasks: response.someday_tasks || [],
         overdueTasks: response.overdue_tasks || [],
         overdueCount: response.overdue_count || 0,
+        bucketItems: {
+          ...state.bucketItems,
+          ...(response.ideas_preview ? { ideas: response.ideas_preview } : {}),
+          ...(response.journals_preview ? { journals: response.journals_preview } : {}),
+        },
         isLoading: false
-      });
+      }));
     } catch (err: any) {
       set({ error: err.message, isLoading: false });
     }
