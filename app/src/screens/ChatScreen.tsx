@@ -71,7 +71,7 @@ export function ChatScreen() {
         ) : (
           <FlatList
             ref={flatListRef}
-            data={messages}
+            data={[...messages].reverse()}
             keyExtractor={(item) => item.id}
             keyboardShouldPersistTaps="handled"
             inverted
