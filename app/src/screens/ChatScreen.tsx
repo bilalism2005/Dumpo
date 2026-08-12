@@ -16,12 +16,9 @@ export function ChatScreen() {
   
   const flatListRef = useRef<FlatList>(null);
 
-  // Scroll to bottom when sending a message
+  // Send message - inverted FlatList automatically anchors to bottom at index 0
   const handleSend = (text: string) => {
     sendMessage(text);
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
   };
 
   const handleTapTag = (bucketKey: string, messageId: string) => {

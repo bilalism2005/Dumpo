@@ -1,9 +1,9 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { API_URL } from '../config';
+import { supabase } from './supabase';
 
 const API_BASE_URL = API_URL;
-
 const TOKEN_KEY = 'supabase_jwt_token';
 
 async function getHeaders(): Promise<HeadersInit> {
@@ -13,19 +13,30 @@ async function getHeaders(): Promise<HeadersInit> {
   
   try {
     let token: string | null = null;
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        token = window.localStorage.getItem(TOKEN_KEY);
-      }
+    
+    // First, try fetching active session directly from Supabase SDK.
+    // Supabase automatically checks and auto-refreshes expired JWT access tokens.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      token = session.access_token;
+      // Persist the fresh token asynchronously
+      setStorageToken(token).catch(() => {});
     } else {
-      token = await SecureStore.getItemAsync(TOKEN_KEY);
+      // Fallback: Read token directly from storage
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          token = window.localStorage.getItem(TOKEN_KEY);
+        }
+      } else {
+        token = await SecureStore.getItemAsync(TOKEN_KEY);
+      }
     }
     
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
   } catch (error) {
-    console.error('Error fetching token from storage', error);
+    console.error('Error fetching token from Supabase / storage', error);
   }
   
   return headers;

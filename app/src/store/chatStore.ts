@@ -162,12 +162,22 @@ export const useChatStore = create<ChatState>()(
         throw new Error("Failed to process message classification");
       }
     } catch (err: any) {
-      // Robust error handling - never crash. Create a friendly assistant error bubble
+      console.error('Chat processing error:', err);
+      const isAuthError = err.message?.includes('Unauthorized') || err.message?.includes('401');
+      if (isAuthError) {
+        // Attempt silent session reload / re-auth
+        useAuthStore.getState().loadSession();
+      }
+
+      const errContent = isAuthError 
+        ? "Session expired. Please log in again to continue." 
+        : "Unable to process dump right now. Please check your network connection.";
+
       const errBubble: ChatMessage = {
         id: `${messageId}-err`,
         role: 'assistant',
-        content: "Oops, I had a small hiccup processing that. I saved it to Others for now.",
-        bucket_tags: ["📦 Others"],
+        content: errContent,
+        bucket_tags: ["⚠️ Connection"],
         created_at: new Date().toISOString()
       };
       
