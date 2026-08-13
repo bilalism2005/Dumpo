@@ -27,7 +27,6 @@ class ExtractedFinance(BaseModel):
     description: str
     amount: float
     currency: str = "INR"
-    category: str
     is_settled: bool = False
 
 class ExtractedHealth(BaseModel):
@@ -37,7 +36,6 @@ class ExtractedHealth(BaseModel):
 
 class ExtractedWatchlist(BaseModel):
     title: str
-    genre: str
     content_type: Optional[str] = None
     platform: Optional[str] = None
     year_of_launch: Optional[str] = None
@@ -90,11 +88,9 @@ class BucketItemUpdateRequest(BaseModel):
     raw_text: Optional[str] = None
     content: Optional[str] = None
     amount: Optional[float] = None
-    category: Optional[str] = None
     is_settled: Optional[bool] = None
     is_complete: Optional[bool] = None
     is_watched: Optional[bool] = None
-    genre: Optional[str] = None
     health_type: Optional[str] = None
     due_date: Optional[str] = None
     due_time: Optional[str] = None

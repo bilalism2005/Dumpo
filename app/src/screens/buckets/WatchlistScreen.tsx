@@ -1,25 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useDashboard } from '../../hooks/useDashboard';
 import { InlineEditText } from '../../components/shared/InlineEditText';
 import { apiRequest } from '../../services/api';
 import { router } from 'expo-router';
 
-const GENRES = [
-  { key: 'action', name: 'Action', icon: '💥' },
-  { key: 'thriller', name: 'Thriller', icon: '🕵️‍♂️' },
-  { key: 'comedy', name: 'Comedy', icon: '😂' },
-  { key: 'horror', name: 'Horror', icon: '👻' },
-  { key: 'romance', name: 'Romance', icon: '❤️' },
-  { key: 'others', name: 'Others', icon: '📦' }
-];
-
 export function WatchlistScreen() {
   const { bucketItems, isLoading, fetchBucketItems, updateBucketItem } = useDashboard();
   const movies = bucketItems['watchlist'] || [];
   
-  const [activeGenre, setActiveGenre] = useState<string | null>(null);
-
   useEffect(() => {
     const hasCachedData = movies.length > 0;
     fetchBucketItems('watchlist', hasCachedData);
@@ -34,84 +23,12 @@ export function WatchlistScreen() {
     }
   };
 
-  // Level 2: Genre List
-  if (activeGenre) {
-    const filteredMovies = movies.filter(
-      m => m.genre.toLowerCase() === activeGenre
-    );
-    const genreInfo = GENRES.find(g => g.key === activeGenre);
+  // Sort: unwatched first, watched at the bottom
+  const sortedMovies = [...movies].sort((a, b) => {
+    if (a.is_watched === b.is_watched) return 0;
+    return a.is_watched ? 1 : -1;
+  });
 
-    // Sort: unwatched first, watched at the bottom
-    const sortedMovies = [...filteredMovies].sort((a, b) => {
-      if (a.is_watched === b.is_watched) return 0;
-      return a.is_watched ? 1 : -1;
-    });
-
-    return (
-      <SafeAreaView style={styles.safeContainer}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setActiveGenre(null)}>
-            <Text style={styles.backText}>◀ Genres</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>
-            {genreInfo?.icon} {genreInfo?.name} Watchlist
-          </Text>
-        </View>
-
-        {sortedMovies.length === 0 ? (
-          <View style={styles.centerContainer}>
-            <Text style={styles.emptyText}>No items in this genre yet.</Text>
-          </View>
-        ) : (
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.listContainer}>
-              {sortedMovies.map((item) => {
-                const details = [
-                  item.year_of_launch,
-                  item.language,
-                  item.platform
-                ].filter(Boolean).join(' · ');
-
-                return (
-                  <View key={item.id} style={styles.movieItem}>
-                    {/* Checkbox (left) */}
-                    <TouchableOpacity 
-                      style={[
-                        styles.checkbox,
-                        item.is_watched && styles.checkboxChecked
-                      ]}
-                      onPress={() => handleToggleWatched(item.id)}
-                    >
-                      {item.is_watched && <Text style={styles.checkmark}>✓</Text>}
-                    </TouchableOpacity>
-
-                    {/* Movie info */}
-                    <View style={styles.movieInfo}>
-                      <InlineEditText
-                        value={item.title}
-                        onChange={(newTitle) => updateBucketItem('watchlist', item.id, { title: newTitle, genre: item.genre, is_watched: item.is_watched })}
-                        style={[
-                          styles.movieTitle,
-                          item.is_watched && styles.movieTitleWatched
-                        ]}
-                        placeholder="Title"
-                      />
-                      {details ? (
-                        <Text style={styles.movieMeta}>{details}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    );
-  }
-
-  // Level 1: Genre Grid (2 columns, 3 rows)
   return (
     <SafeAreaView style={styles.safeContainer}>
       {/* Header */}
@@ -126,26 +43,49 @@ export function WatchlistScreen() {
         <View style={styles.centerContainer}>
           <ActivityIndicator color="#a855f7" size="large" />
         </View>
+      ) : sortedMovies.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>Your watchlist is empty.</Text>
+        </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <Text style={styles.gridHeading}>Choose Genre</Text>
-          
-          <View style={styles.grid}>
-            {GENRES.map((genre) => {
-              const count = movies.filter(m => m.genre.toLowerCase() === genre.key).length;
+          <View style={styles.listContainer}>
+            {sortedMovies.map((item) => {
+              const details = [
+                item.year_of_launch,
+                item.language,
+                item.platform
+              ].filter(Boolean).join(' · ');
+
               return (
-                <TouchableOpacity
-                  key={genre.key}
-                  style={styles.gridCard}
-                  onPress={() => setActiveGenre(genre.key)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.gridIcon}>{genre.icon}</Text>
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.gridName}>{genre.name}</Text>
-                    <Text style={styles.gridCount}>{count} items</Text>
+                <View key={item.id} style={styles.movieItem}>
+                  {/* Checkbox (left) */}
+                  <TouchableOpacity 
+                    style={[
+                      styles.checkbox,
+                      item.is_watched && styles.checkboxChecked
+                    ]}
+                    onPress={() => handleToggleWatched(item.id)}
+                  >
+                    {item.is_watched && <Text style={styles.checkmark}>✓</Text>}
+                  </TouchableOpacity>
+
+                  {/* Movie info */}
+                  <View style={styles.movieInfo}>
+                    <InlineEditText
+                      value={item.title}
+                      onChange={(newTitle) => updateBucketItem('watchlist', item.id, { title: newTitle, is_watched: item.is_watched })}
+                      style={[
+                        styles.movieTitle,
+                        item.is_watched && styles.movieTitleWatched
+                      ]}
+                      placeholder="Title"
+                    />
+                    {details ? (
+                      <Text style={styles.movieMeta}>{details}</Text>
+                    ) : null}
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -196,53 +136,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-  },
-  gridHeading: {
-    fontFamily: 'System',
-    fontSize: 15,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.5)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 16,
-    marginTop: 8,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -6,
-  },
-  gridCard: {
-    width: '50% - 12px',
-    backgroundColor: '#13131c',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-    padding: 16,
-    margin: 6,
-    minHeight: 100,
-    flexGrow: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  gridIcon: {
-    fontSize: 30,
-  },
-  cardInfo: {
-    justifyContent: 'center',
-  },
-  gridName: {
-    fontFamily: 'System',
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  gridCount: {
-    fontFamily: 'System',
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.4)',
-    marginTop: 2,
   },
   listContainer: {
     backgroundColor: '#13131c',

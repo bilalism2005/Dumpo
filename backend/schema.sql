@@ -74,7 +74,6 @@ CREATE TABLE IF NOT EXISTS public.finance (
     description TEXT NOT NULL,
     amount NUMERIC NOT NULL,
     currency TEXT DEFAULT 'INR' NOT NULL,
-    category TEXT NOT NULL, -- 'food','groceries','transport','shopping','entertainment','health','pay','receive','others'
     is_settled BOOLEAN DEFAULT FALSE NOT NULL,
     settled_at TIMESTAMP WITH TIME ZONE,
     secondary_buckets TEXT[] DEFAULT '{}'::TEXT[] NOT NULL,
@@ -99,7 +98,6 @@ CREATE TABLE IF NOT EXISTS public.watchlist (
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
     dump_id UUID REFERENCES public.chat_messages(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
-    genre TEXT NOT NULL, -- 'action','thriller','comedy','horror','romance','others'
     content_type TEXT, -- 'movie', 'show', 'documentary', 'anime'
     platform TEXT,
     year_of_launch TEXT,

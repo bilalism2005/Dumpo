@@ -80,11 +80,10 @@ Classify into: tasks | ideas | journals | finance | health | watchlist | others.
 
 WATCHLIST RULES & CONTEXT:
 - Classify into `watchlist` ONLY if there is clear media intent OR if the Chat Context shows you just asked the user if they wanted to add it to their watchlist and they replied affirmatively.
-- Examples: "Watch Peaky Blinders" -> genre: thriller. "Watch Interstellar" -> genre: others.
 - UNCERTAINTY RULE: If you are NOT SURE whether a word/phrase is a movie/show, classify it into `others`.
 
 FINANCE RULES:
-- Examples: "I owe Aryan 500" -> category: pay. "Aryan owes me 500" -> category: receive.
+- Classify into `finance` for any monetary transactions, debts, or expenses.
 """
 
 
@@ -92,9 +91,9 @@ SCHEMA_REFERENCE = """EXTRACTION SCHEMAS (populate these fields directly in the 
 - tasks: { "title": "<task_title>", "due_date": "YYYY-MM-DD" or null, "due_time": "HH:MM" or null, "reminder_required": <boolean> }
 - ideas: { "title": "<idea_title>", "description": "<description> or null" }
 - journals: { "journal_date": "YYYY-MM-DD", "title": "<title>", "content": "<content>", "mood_signal": "positive"|"negative"|"neutral" }
-- finance: { "description": "<desc>", "amount": <number>, "currency": "INR"|"USD"|..., "category": "food"|"groceries"|"others", "is_settled": <boolean> }
+- finance: { "description": "<desc>", "amount": <number>, "currency": "INR"|"USD"|..., "is_settled": <boolean> }
 - health: { "title": "<title>", "description": "<desc>", "health_type": "physical"|"mental"|"medical"|"nutrition" }
-- watchlist: { "title": "<movie_or_show_title>", "genre": "action"|"thriller"|"others", "content_type": "movie"|"show"|null, "platform": "<platform>"|null, "year_of_launch": "<year>"|null, "language": "<lang>"|null, "is_watched": <boolean> }
+- watchlist: { "title": "<movie_or_show_title>", "content_type": "movie"|"show"|null, "platform": "<platform>"|null, "year_of_launch": "<year>"|null, "language": "<lang>"|null, "is_watched": <boolean> }
 - others: { "raw_text": "<text>" }
 """
 
@@ -115,8 +114,8 @@ def validate_crud_fields(bucket: str, resolved_id: Optional[str], update_fields:
     if update_fields and isinstance(update_fields, dict):
         allowed = {
             "tasks": ["is_complete", "title", "due_date", "due_time", "reminder_required"],
-            "watchlist": ["is_watched", "title", "genre", "content_type", "platform", "language", "year_of_launch"],
-            "finance": ["is_settled", "description", "amount", "currency", "category"],
+            "watchlist": ["is_watched", "title", "content_type", "platform", "language", "year_of_launch"],
+            "finance": ["is_settled", "description", "amount", "currency"],
             "ideas": ["title", "description"],
             "journals": ["title", "content"],
             "health": ["title", "description", "health_type"],
@@ -184,12 +183,7 @@ def validate_extracted_fields(bucket: str, extracted: Dict[str, Any], formatted_
         except (ValueError, TypeError):
             extracted["amount"] = 0.0
         extracted["currency"] = str(extracted.get("currency", "INR"))
-        category = str(extracted.get("category", "others")).lower()
-        allowed_categories = ["food", "groceries", "transport", "shopping", "entertainment", "health", "pay", "receive", "others"]
-        if category not in allowed_categories:
-            extracted["category"] = "others"
-        else:
-            extracted["category"] = category
+        extracted["category"] = "others"
         extracted["is_settled"] = bool(extracted.get("is_settled", False))
 
     elif bucket == "health":
@@ -206,12 +200,7 @@ def validate_extracted_fields(bucket: str, extracted: Dict[str, Any], formatted_
     elif bucket == "watchlist":
         if "title" not in extracted or not str(extracted.get("title", "")).strip():
             extracted["title"] = formatted_text[:100] if formatted_text else "Unnamed Movie/Show"
-        genre = str(extracted.get("genre", "others")).lower()
-        allowed_genres = ["action", "thriller", "comedy", "horror", "romance", "others"]
-        if genre not in allowed_genres:
-            extracted["genre"] = "others"
-        else:
-            extracted["genre"] = genre
+        extracted["genre"] = "others"
         extracted["is_watched"] = bool(extracted.get("is_watched", False))
 
     elif bucket == "others":

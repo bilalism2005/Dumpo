@@ -146,7 +146,7 @@ def normalize_update_fields(bucket: str, update_fields: Dict[str, Any]) -> Dict[
                 elif val in [False, "unwatched", "false", 0]:
                     normalized["is_watched"] = False
                     normalized["watched_at"] = None
-            elif key_lower in ["title", "genre", "content_type", "platform", "language", "year_of_launch"]:
+            elif key_lower in ["title", "content_type", "platform", "language", "year_of_launch"]:
                 normalized[key_lower] = val
 
     elif bucket == "finance":
@@ -159,7 +159,7 @@ def normalize_update_fields(bucket: str, update_fields: Dict[str, Any]) -> Dict[
                 elif val in [False, "unsettled", "pending", "false", 0]:
                     normalized["is_settled"] = False
                     normalized["settled_at"] = None
-            elif key_lower in ["description", "amount", "currency", "category"]:
+            elif key_lower in ["description", "amount", "currency"]:
                 normalized[key_lower] = val
 
     elif bucket == "ideas":
