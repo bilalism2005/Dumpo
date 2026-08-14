@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 from backend.routers.auth import get_current_user_id
 from backend.services.supabase_service import get_supabase_client
@@ -7,19 +7,32 @@ from backend.services.supabase_service import get_supabase_client
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 supabase = get_supabase_client()
 
-def is_completed_on_prior_day(task: dict, current_date_str: str) -> bool:
+def is_completed_on_prior_day(task: dict, current_date_str: str, timezone_offset: int = 0) -> bool:
     if not task.get("is_complete"):
         return False
     completed_at = task.get("completed_at")
     if completed_at:
-        completed_date = str(completed_at)[:10]
-        if completed_date < current_date_str:
-            return True
+        try:
+            # completed_at is usually ISO 8601 UTC from the backend, e.g. 2026-08-13T19:00:00Z or ...+00:00
+            # Remove the 'Z' if present for parsing
+            clean_time = str(completed_at).replace("Z", "+00:00")
+            dt_utc = datetime.fromisoformat(clean_time)
+            # offset in JS is (UTC - Local) in minutes. So Local = UTC - offset
+            dt_local = dt_utc - timedelta(minutes=timezone_offset)
+            completed_date = dt_local.date().isoformat()
+            if completed_date < current_date_str:
+                return True
+        except Exception:
+            # fallback to naive string slicing if parsing fails
+            completed_date = str(completed_at)[:10]
+            if completed_date < current_date_str:
+                return True
     return False
 
 @router.get("/dashboard")
 async def get_dashboard(
     current_date: Optional[str] = Query(None, description="Local date of client in YYYY-MM-DD format"),
+    timezone_offset: int = Query(0, description="JS getTimezoneOffset() in minutes"),
     user_id: str = Depends(get_current_user_id)
 ):
     """
@@ -76,8 +89,8 @@ async def get_dashboard(
         journals_preview = journals_res.data if journals_res.data else []
         
         # Filter out tasks completed on prior days so daily progress resets at midnight
-        today_tasks = [t for t in today_tasks_raw if not is_completed_on_prior_day(t, current_date)]
-        someday_tasks = [t for t in someday_tasks_raw if not is_completed_on_prior_day(t, current_date)]
+        today_tasks = [t for t in today_tasks_raw if not is_completed_on_prior_day(t, current_date, timezone_offset)]
+        someday_tasks = [t for t in someday_tasks_raw if not is_completed_on_prior_day(t, current_date, timezone_offset)]
         
         return {
             "success": True,

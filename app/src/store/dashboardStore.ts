@@ -72,7 +72,8 @@ export const useDashboardStore = create<DashboardState>()(
   fetchDashboard: async (currentDate, silent = false) => {
     if (!silent) set({ isLoading: true });
     try {
-      const dateParam = currentDate ? `?current_date=${currentDate}` : '';
+      const offset = new Date().getTimezoneOffset();
+      const dateParam = currentDate ? `?current_date=${currentDate}&timezone_offset=${offset}` : `?timezone_offset=${offset}`;
       const response = await apiRequest(`/api/v1/dashboard${dateParam}`, 'GET');
       
       set((state) => ({
