@@ -6,7 +6,7 @@ export function useChat() {
     useChatStore.persist.hasHydrated()
   );
 
-  const { messages, isLoading, error, sendMessage, fetchMessages, clearChat, reclassifyMessageItem } = useChatStore();
+  const { messages, isLoading, hasMore, error, sendMessage, fetchMessages, clearChat, reclassifyMessageItem } = useChatStore();
 
   useEffect(() => {
     if (chatHydrated) return;
@@ -25,8 +25,10 @@ export function useChat() {
   return {
     messages,
     isLoading: !chatHydrated || isLoading,
+    hasMore,
     error,
     sendMessage,
+    fetchMessages,
     clearChat,
     reclassifyMessageItem
   };

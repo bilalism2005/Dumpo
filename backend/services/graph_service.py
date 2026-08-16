@@ -41,7 +41,7 @@ BUCKET_TABLE_MAP = {
 }
 
 
-def get_live_user_memory(user_id: str, today: str) -> Dict[str, Any]:
+async def get_live_user_memory(user_id: str, today: str) -> Dict[str, Any]:
     """
     Fetch a compressed snapshot of the user's active data across ALL buckets directly from DB
     so the Router LLM can resolve CRUD entity IDs.
@@ -55,53 +55,38 @@ def get_live_user_memory(user_id: str, today: str) -> Dict[str, Any]:
       journals  → 1   (today's entry only, if exists)
     """
     try:
-        tasks_res = supabase.table("tasks")\
-            .select("id, title, due_date")\
-            .eq("user_id", user_id)\
-            .eq("is_complete", False)\
-            .order("created_at", desc=True)\
-            .limit(30).execute()
+        loop = asyncio.get_running_loop()
+        
+        def fetch_tasks():
+            return supabase.table("tasks").select("id, title, due_date").eq("user_id", user_id).eq("is_complete", False).order("created_at", desc=True).limit(30).execute()
+        def fetch_watchlist():
+            return supabase.table("watchlist").select("id, title, is_watched").eq("user_id", user_id).eq("is_watched", False).order("created_at", desc=True).limit(25).execute()
+        def fetch_ideas():
+            return supabase.table("ideas").select("id, title").eq("user_id", user_id).order("created_at", desc=True).limit(20).execute()
+        def fetch_finance():
+            return supabase.table("finance").select("id, description, is_settled, amount, currency").eq("user_id", user_id).eq("is_settled", False).order("created_at", desc=True).limit(15).execute()
+        def fetch_health():
+            return supabase.table("health").select("id, title").eq("user_id", user_id).order("created_at", desc=True).limit(9).execute()
+        def fetch_journals():
+            return supabase.table("journals").select("id, journal_date, title").eq("user_id", user_id).eq("journal_date", today).limit(1).execute()
 
-        watchlist_res = supabase.table("watchlist")\
-            .select("id, title, is_watched")\
-            .eq("user_id", user_id)\
-            .eq("is_watched", False)\
-            .order("created_at", desc=True)\
-            .limit(25).execute()
-
-        ideas_res = supabase.table("ideas")\
-            .select("id, title")\
-            .eq("user_id", user_id)\
-            .order("created_at", desc=True)\
-            .limit(20).execute()
-
-        finance_res = supabase.table("finance")\
-            .select("id, description, is_settled, amount, currency")\
-            .eq("user_id", user_id)\
-            .eq("is_settled", False)\
-            .order("created_at", desc=True)\
-            .limit(15).execute()
-
-        health_res = supabase.table("health")\
-            .select("id, title")\
-            .eq("user_id", user_id)\
-            .order("created_at", desc=True)\
-            .limit(9).execute()
-
-        # Journals — today's entry ONLY (max 1)
-        journal_res = supabase.table("journals")\
-            .select("id, journal_date, title")\
-            .eq("user_id", user_id)\
-            .eq("journal_date", today)\
-            .limit(1).execute()
+        # Execute all synchronously blocking Supabase network calls concurrently in a threadpool
+        t_res, w_res, i_res, f_res, h_res, j_res = await asyncio.gather(
+            loop.run_in_executor(None, fetch_tasks),
+            loop.run_in_executor(None, fetch_watchlist),
+            loop.run_in_executor(None, fetch_ideas),
+            loop.run_in_executor(None, fetch_finance),
+            loop.run_in_executor(None, fetch_health),
+            loop.run_in_executor(None, fetch_journals)
+        )
 
         memories = {
-            "tasks":     tasks_res.data or [],
-            "watchlist": watchlist_res.data or [],
-            "ideas":     ideas_res.data or [],
-            "finance":   finance_res.data or [],
-            "health":    health_res.data or [],
-            "journals":  journal_res.data or [],
+            "tasks":     t_res.data or [],
+            "watchlist": w_res.data or [],
+            "ideas":     i_res.data or [],
+            "finance":   f_res.data or [],
+            "health":    h_res.data or [],
+            "journals":  j_res.data or [],
         }
 
         logger.info(
@@ -606,9 +591,15 @@ dumpo_graph = workflow.compile()
 
 # ─── Entry Point ─────────────────────────────────────────────────────────────
 async def process_user_dump_graph(
-    user_id: str, message_id: str, text: str,
-    current_time_context: Optional[str] = None
+    user_id: str,
+    message_id: str,
+    text: str,
+    current_time_context: Optional[str]
 ) -> Dict[str, Any]:
+    """Execute the LangGraph pipeline for the user's dump."""
+    today = current_time_context.split("T")[0] if current_time_context else datetime.now(timezone.utc).date().isoformat()
+    # Fetch live state context for LLM grounding (await since it's now async)
+    live_memory = await get_live_user_memory(user_id, today)
 
     initial_state: AgentState = {
         "raw_input": text,
@@ -616,7 +607,7 @@ async def process_user_dump_graph(
         "message_id": message_id,
         "current_time_context": current_time_context,
         "chat_history": [],
-        "live_memory": {},
+        "live_memory": live_memory,
         "dump_type": "",
         "journal_segment": None,
         "atomic_items": [],

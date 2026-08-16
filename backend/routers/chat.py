@@ -39,19 +39,29 @@ async def process_dump(
 
 @router.get("/chat/history")
 async def get_chat_history(
+    limit: int = Query(50, description="Max messages to return"),
+    offset: int = Query(0, description="Offset for pagination"),
     user_id: str = Depends(get_current_user_id)
 ):
     """
     Fetch raw chat messages and assistant replies directly from the unified chat_messages log.
+    Supports pagination to prevent loading massive histories.
     """
     try:
         res = supabase.table("chat_messages")\
             .select("*")\
             .eq("user_id", user_id)\
             .order("created_at", desc=False)\
+            .limit(limit)\
+            .offset(offset)\
             .execute()
         messages = res.data if res.data else []
-        return {"success": True, "messages": messages}
+        
+        # We need to determine if there's more data. Supabase count isn't returned by default unless specified.
+        # Simple heuristic: if we got exactly `limit` messages, there MIGHT be more. 
+        has_more = len(messages) == limit
+        
+        return {"success": True, "messages": messages, "has_more": has_more}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -20,7 +20,9 @@ interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
-  fetchMessages: (silent?: boolean) => Promise<void>;
+  hasMore: boolean;
+  offset: number;
+  fetchMessages: (silent?: boolean, loadMore?: boolean) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   clearChat: () => void;
   reclassifyMessageItem: (messageId: string, toBucket: string) => Promise<void>;
@@ -64,13 +66,19 @@ export const useChatStore = create<ChatState>()(
       messages: [],
       isLoading: false,
       error: null,
+      hasMore: true,
+      offset: 0,
       
-      fetchMessages: async (silent = false) => {
+      fetchMessages: async (silent = false, loadMore = false) => {
         if (!silent) set({ isLoading: true });
+        
+        const currentOffset = loadMore ? get().offset : 0;
+        const limit = 50;
+        
     try {
-      const response = await apiRequest('/api/v1/chat/history', 'GET');
+      const response = await apiRequest(`/api/v1/chat/history?limit=${limit}&offset=${currentOffset}`, 'GET');
       if (response.success && response.messages) {
-        if (response.messages.length === 0) {
+        if (response.messages.length === 0 && currentOffset === 0) {
           set({
             messages: [{
               id: 'welcome',
@@ -78,16 +86,20 @@ export const useChatStore = create<ChatState>()(
               content: "Hey, I'm Dumpo. Drop anything on your mind. I'll take care of the rest.",
               created_at: new Date().toISOString()
             }],
-            isLoading: false
+            isLoading: false,
+            hasMore: false,
+            offset: 0
           });
         } else {
-          set({
-            messages: response.messages,
-            isLoading: false
-          });
+          set((state) => ({
+            messages: loadMore ? [...response.messages, ...state.messages] : response.messages,
+            isLoading: false,
+            hasMore: response.has_more !== false && response.messages.length === limit,
+            offset: currentOffset + response.messages.length
+          }));
         }
       } else {
-        set({ isLoading: false });
+        set({ isLoading: false, hasMore: false });
       }
     } catch (err: any) {
       set({ error: err.message, isLoading: false });

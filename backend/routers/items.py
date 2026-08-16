@@ -1,7 +1,8 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from datetime import datetime
+import asyncio
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 from backend.routers.auth import get_current_user_id
 from backend.services.supabase_service import get_supabase_client
 from backend.models.schemas import BucketItemUpdateRequest, ReclassifyRequest
@@ -16,10 +17,12 @@ BUCKET_TABLES = ["tasks", "ideas", "journals", "finance", "health", "watchlist",
 @router.get("/buckets/{bucket_name}")
 async def get_bucket_items(
     bucket_name: str,
+    limit: int = Query(50, description="Max items to return"),
+    offset: int = Query(0, description="Offset for pagination"),
     user_id: str = Depends(get_current_user_id)
 ):
     """
-    Fetch all items belonging to a specific bucket.
+    Fetch items belonging to a specific bucket with pagination support.
     Includes items where the bucket is the primary table,
     plus items where the bucket is in secondary_buckets of other tables.
     """
@@ -32,39 +35,56 @@ async def get_bucket_items(
     try:
         combined_items = []
         
-        # 1. Fetch from the primary table of this bucket
-        primary_res = supabase.table(bucket_name).select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        loop = asyncio.get_running_loop()
+        
+        # 1. Primary query function
+        def fetch_primary():
+            # For primary, we fetch limit + offset, then slice later if needed, but since we merge we just fetch a batch
+            return supabase.table(bucket_name).select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).offset(offset).execute()
+            
+        # 2. Secondary queries function
+        def fetch_secondary(other_table):
+            return supabase.table(other_table).select("*").eq("user_id", user_id).contains("secondary_buckets", [bucket_name]).order("created_at", desc=True).limit(limit).offset(offset).execute()
+            
+        tasks = [loop.run_in_executor(None, fetch_primary)]
+        
+        secondary_tables = []
+        for other_table in BUCKET_TABLES:
+            if other_table != bucket_name and other_table != "others":
+                secondary_tables.append(other_table)
+                tasks.append(loop.run_in_executor(None, fetch_secondary, other_table))
+                
+        # Execute all queries concurrently
+        results = await asyncio.gather(*tasks)
+        
+        primary_res = results[0]
+        secondary_results = results[1:]
+        
         if primary_res.data:
             for row in primary_res.data:
                 row["source_table"] = bucket_name
                 row["is_primary"] = True
                 combined_items.append(row)
                 
-        # 2. Fetch from other tables where this bucket is in secondary_buckets
-        for other_table in BUCKET_TABLES:
-            if other_table == bucket_name or other_table == "others":
-                # 'others' doesn't have secondary_buckets
-                continue
-                
-            secondary_res = supabase.table(other_table)\
-                .select("*")\
-                .eq("user_id", user_id)\
-                .contains("secondary_buckets", [bucket_name])\
-                .execute()
-                
-            if secondary_res.data:
-                for row in secondary_res.data:
+        for i, other_table in enumerate(secondary_tables):
+            sec_res = secondary_results[i]
+            if sec_res.data:
+                for row in sec_res.data:
                     row["source_table"] = other_table
                     row["is_primary"] = False
                     combined_items.append(row)
                     
-        # Sort combined list by created_at desc (or custom sorting depending on bucket type)
+        # Sort combined list by created_at desc
         combined_items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        # We slice to ensure we don't return more than `limit` items after merging
+        paginated_items = combined_items[:limit]
         
         return {
             "success": True,
             "bucket": bucket_name,
-            "items": combined_items
+            "items": paginated_items,
+            "has_more": len(combined_items) > limit
         }
         
     except Exception as e:

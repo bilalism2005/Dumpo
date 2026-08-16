@@ -8,7 +8,7 @@ import { useChat } from '../hooks/useChat';
 import { useAuthStore } from '../store/authStore';
 
 export function ChatScreen() {
-  const { messages, isLoading, sendMessage, reclassifyMessageItem } = useChat();
+  const { messages, isLoading, hasMore, sendMessage, fetchMessages, reclassifyMessageItem } = useChat();
   const { user } = useAuthStore();
   
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -19,6 +19,12 @@ export function ChatScreen() {
   // Send message - inverted FlatList automatically anchors to bottom at index 0
   const handleSend = (text: string) => {
     sendMessage(text);
+  };
+
+  const handleLoadMore = () => {
+    if (hasMore && !isLoading) {
+      fetchMessages(true, true);
+    }
   };
 
   const handleTapTag = (bucketKey: string, messageId: string) => {
@@ -72,6 +78,8 @@ export function ChatScreen() {
             keyExtractor={(item) => item.id}
             keyboardShouldPersistTaps="handled"
             inverted
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
             renderItem={({ item }) => (
               <MessageBubble 
                 message={item} 
