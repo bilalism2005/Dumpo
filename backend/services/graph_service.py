@@ -214,7 +214,7 @@ async def router_node(state: AgentState) -> AgentState:
     except Exception:
         today = datetime.now(timezone.utc).date().isoformat()
 
-    memories = get_live_user_memory(user_id, today)
+    memories = state.get("live_memory") or await get_live_user_memory(user_id, today)
     memory_context = ""
     if memories:
         memory_context = json.dumps(memories, ensure_ascii=False)
