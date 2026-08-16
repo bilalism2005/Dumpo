@@ -51,11 +51,15 @@ async def get_chat_history(
         res = supabase.table("chat_messages")\
             .select("*")\
             .eq("user_id", user_id)\
-            .order("created_at", desc=False)\
+            .order("created_at", desc=True)\
             .limit(limit)\
             .offset(offset)\
             .execute()
+        
+        # We fetch newest first (desc=True) for pagination, but frontend expects 
+        # chronological order (oldest to newest). So we reverse the batch.
         messages = res.data if res.data else []
+        messages.reverse()
         
         # We need to determine if there's more data. Supabase count isn't returned by default unless specified.
         # Simple heuristic: if we got exactly `limit` messages, there MIGHT be more. 
