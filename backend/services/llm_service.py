@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 client = Groq(api_key=settings.GROQ_API_KEY)
 
 # Define the Groq model
-MODEL_NAME = "llama-3.1-8b-instant"
+MODEL_NAME = "gpt-oss-20b"
 
 ROUTER_SYSTEM_PROMPT = """You are Dumpo's Router and Classification engine. Your task is to process the user's raw thought dumps, fix grammar, split them, classify their type, and route them.
 

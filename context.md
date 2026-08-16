@@ -1,5 +1,20 @@
 # Change Log
 
+- **2026-08-16T19:28:00+05:30**
+  - **Model Upgrade:** Migrated core Groq LLM model from `llama-3.1-8b-instant` to `gpt-oss-20b` following Groq's deprecation notice for the Llama 3.1 8B Instant model. 
+  
+**Current Status**: Backend uses the recommended `gpt-oss-20b` model.
+
+**Decisions**:
+- Used standard hyphenated lowercase format (`gpt-oss-20b`) for the Groq model identifier as requested by the deprecation notice for "GPT OSS 20B".
+
+
+- **2026-08-14T09:54:00+05:30**
+  - **EAS Deployment Fix:** Re-targeted Expo OTA updates from `main` to `preview` branch to correctly hit the live active channel on user devices.
+  - **Timezone Synchronization:** Passed `timezone_offset` from frontend `dashboardStore.ts` API calls. Updated `backend/routers/dashboard.py` to parse UTC `completed_at` ISO stamps, subtract the offset to match local device time, and safely extract the midnight-aligned date before filtering dashboard items. This fixes the bug where tasks marked done immediately vanished if they crossed UTC midnight boundaries.
+
+**Current Status**: Code changes pushed and Expo OTA update compiling on `preview` channel. All timezone resets behave cleanly relative to the client device.
+
 - **2026-08-13T19:35:00+05:30**
   - **Buckets Simplification:** Simplified Finance and Watchlist buckets by removing the sub-categories (`category` in finance, `genre` in watchlist). 
   - **Database schema updates:** Ignored constraints by defaulting AI values to "others" to protect intact data while logically removing constraints. `schema.sql` definitions updated to reflect intent.
