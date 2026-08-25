@@ -55,11 +55,13 @@ For each item, determine its `action_type`:
   - UPDATING: "Mark meeting with John as done", "I watched Interstellar", "Aryan paid me back" → CRUD UPDATE
   - DELETING: "Cancel my meeting", "Remove the gym task" → CRUD DELETE
   - APPENDING to journal: "Also add that I had pizza" → CRUD APPEND
+  - PRONOUN RESOLUTION: If the user uses pronouns (e.g., "that", "it") or a follow-up modification (e.g., "at 5pm"), cross-reference the RECENT CHAT CONTEXT to identify the item, find its exact `id` in the ACTIVE MEMORY CONTEXT, and return a CRUD UPDATE.
   USE THE MEMORY CONTEXT to find resolved_id. Set operation to UPDATE/DELETE/APPEND/READ.
 
 - CHAT: ONLY for general knowledge questions with NO connection to the user's stored data, OR when answering a direct question from the Chat Context (e.g. "Yes").
   Examples of CHAT: "What is the capital of France?", "Should I work out today?"
   Examples NOT chat (they are CRUD): "What are my tasks?", "Did I run today?"
+  IMPORTANT: Any actionable directive, command, or to-do (e.g., "Make X fast", "Fix Y", "Build Z") MUST be classified as a CREATE in `tasks` or `ideas`. NEVER classify directives as CHAT.
 
 - CREATE: Adding a brand new item that does NOT exist in memory context.
   IMPORTANT TASK RULES:
@@ -280,6 +282,9 @@ async def router_node_llm(text: str, user_id: str, memory_context: str = "", cur
                 primary = item.get("primary_bucket", "others")
                 if not primary:
                      primary = "others"
+                primary = primary.lower()
+                item["primary_bucket"] = primary
+                
                 formatted_text = item.get("formatted_text", text)
                 
                 # Only validate extracted fields if action_type is CREATE
