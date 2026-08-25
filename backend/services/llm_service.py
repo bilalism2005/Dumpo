@@ -278,6 +278,16 @@ async def router_node_llm(text: str, user_id: str, memory_context: str = "", cur
             
             # Enforce schema validation and defaults on atomic_items
             items = data.get("atomic_items", [])
+            if not items and not data.get("journal_segment"):
+                # Fallback if LLM returns empty array (e.g. for short greetings like "Hey")
+                items = [{
+                    "action_type": "CHAT",
+                    "primary_bucket": "others",
+                    "formatted_text": text,
+                    "extracted": {"raw_text": text}
+                }]
+                data["atomic_items"] = items
+
             for item in items:
                 primary = item.get("primary_bucket", "others")
                 if not primary:
